@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Math Studio - Windows 11 Fluent Edition</title>
+  <link rel="icon" type="image/png" href="./app_icon.png">
+  <link rel="stylesheet" href="./styles/win11_settings.css">
+  <link rel="stylesheet" href="./lib/katex.min.css">
+</head>
+<body>
+  <!-- ====================================================================
+       Page 1: Project Resource Window (项目资源窗口)
+       ==================================================================== -->
+  <div id="page-home" class="app-page active">
+    <div class="home-container">
+      <div class="home-header">
+        <div class="home-logo" style="font-family: 'Times New Roman', Georgia, Cambria, serif; font-weight: bold;">M</div>
+        <div>
+          <h1>Math Studio</h1>
+          <p>数学函数与动画可视化工具</p>
+        </div>
+      </div>
+
+      <div class="home-actions">
+        <button id="new-project-btn" class="home-action-card primary">
+          <span class="home-action-dot"></span>
+          <div class="home-action-text">
+            <div class="home-action-title">新建项目</div>
+            <div class="home-action-desc">创建一个全新的数学可视化项目</div>
+          </div>
+        </button>
+        <button id="open-project-btn" class="home-action-card">
+          <span class="home-action-dot"></span>
+          <div class="home-action-text">
+            <div class="home-action-title">打开项目</div>
+            <div class="home-action-desc">从已保存的项目文件中继续工作</div>
+          </div>
+        </button>
+      </div>
+
+      <div class="home-projects">
+        <div class="home-projects-title">最近项目</div>
+        <div id="home-project-list" class="home-project-list">
+          <div class="home-projects-empty">暂无已保存的项目</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       Page 2: Math Studio (第二页面)
+       ==================================================================== -->
+  <div id="page-studio" class="app-page">
+  <div class="app-container">
+
+    <!-- ====================================================================
+         Windows 11 Left Navigation Rail (Sidebar)
+         ==================================================================== -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="app-icon" style="font-family: 'Times New Roman', Georgia, Cambria, serif; font-size: 24px; font-weight: bold; background: linear-gradient(135deg, #0078d4, #004578); box-shadow: 0 4px 12px rgba(0, 120, 212, 0.4);">
+          <span>M</span>
+        </div>
+        <div class="app-title-group">
+          <h1>Math Studio</h1>
+          <p>Windows Fluent Edition</p>
+        </div>
+      </div>
+
+      <div class="sidebar-search">
+        <div class="win11-search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="nav-search-input" placeholder="查找设置或函数...">
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-item active" data-target="studio">
+          <span class="nav-icon">📊</span>
+          <span class="nav-label">表达式与3D工作台</span>
+        </div>
+        <div class="nav-item" data-target="keyframes">
+          <span class="nav-icon">⏱️</span>
+          <span class="nav-label">关键帧与复合函数动画</span>
+        </div>
+        <div class="nav-item" data-target="calculus">
+          <span class="nav-icon">📐</span>
+          <span class="nav-label">微积分与高等数学</span>
+        </div>
+        <div class="nav-item" data-target="presets">
+          <span class="nav-icon">🌀</span>
+          <span class="nav-label">预设库与多波混合</span>
+        </div>
+        <div class="nav-item" data-target="export">
+          <span class="nav-icon">💻</span>
+          <span class="nav-label">代码生成与视频导出</span>
+        </div>
+        <div class="nav-item" data-target="preferences">
+          <span class="nav-icon">⚙️</span>
+          <span class="nav-label">首选项与视口设置</span>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="footer-profile">
+          <div class="avatar-badge" style="font-family: 'Times New Roman', Georgia, Cambria, serif; font-size: 14px; font-weight: bold; background: #0078d4; color: #ffffff;">M</div>
+          <div>
+            <div style="font-size: 12px; font-weight: 600;">Math Studio</div>
+            <div style="font-size: 11px; color: var(--win-text-secondary);">v2.0 旗舰版</div>
+          </div>
+        </div>
+        <div class="footer-actions">
+          <button id="save-project-btn" class="win11-btn sm" title="保存当前项目">保存</button>
+          <button id="back-home-btn" class="win11-btn sm" title="返回项目资源窗口">返回</button>
+          <button id="theme-toggle-btn" class="hud-btn" title="切换深色/浅色模式">•</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ====================================================================
+         Main Workspace: Split Panes (Settings Controls + 3D Viewport)
+         ==================================================================== -->
+    <main class="main-content">
+
+      <!-- Left Settings Content Pane -->
+      <section class="content-pane" id="settings-scroll-pane">
+
+        <!-- --------------------------------------------------------------
+             Page 1: 表达式与3D工作台 (Expression Studio)
+             -------------------------------------------------------------- -->
+        <div class="page-section active" id="sec-studio">
+          <div class="page-breadcrumbs">
+            <span>设置</span> <span>›</span> <span>表达式与3D工作台</span>
+          </div>
+          <h2 class="page-title">• 表达式工作台</h2>
+
+          <div class="section-group-title">数学表达式定义</div>
+
+          <!-- Function Type Selector -->
+          <div class="win11-card">
+            <div class="card-info">
+              <div class="card-icon">🔲</div>
+              <div class="card-text">
+                <div class="card-title">函数表现形式</div>
+                <div class="card-desc">选择数学表达式在三维空间中的几何构建模式</div>
+              </div>
+            </div>
+            <div class="card-control">
+              <select id="func-type-select" class="win11-select">
+                <option value="explicit" selected>显式曲面 z = f(x, y, t)</option>
+                <option value="parametric_curve">空间参数曲线 (x(u), y(u), z(u))</option>
+                <option value="parametric_surface">三维参数曲面 (x(u,v), y(u,v), z(u,v))</option>
+                <option value="vector_field">三维向量场 F(x,y,z) = (u, v, w)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Explicit Input Block -->
+          <div id="block-explicit">
+            <div class="win11-card">
+              <div class="card-info">
+                <div class="card-icon">𝑓</div>
+                <div class="card-text">
+                  <div class="card-title">函数方程 z = f(x, y)</div>
+                  <div class="card-desc">支持 sin, cos, tan, exp, sqrt, abs, sinc 等函数及自定义参数</div>
+                </div>
+              </div>
+              <div class="card-control" style="flex: 1.2;">
+                <input type="text" id="expr-explicit-input" class="win11-input mono" style="width: 100%;" value="A * cos(omega * sqrt(x^2 + y^2) - t) / (1 + 0.12 * (x^2 + y^2))">
+              </div>
+            </div>
+          </div>
+
+          <!-- Parametric Curve Block (Hidden by default) -->
+          <div id="block-parametric-curve" style="display: none;">
+            <div class="win11-card">
+              <div class="card-info">
+                <div class="card-icon">𝑋</div>
+                <div class="card-text"><div class="card-title">X(u, t)</div></div>
+              </div>
+              <div class="card-control" style="flex: 1.2;">
+                <input type="text" id="curve-x-input" class="win11-input mono" style="width: 100%;" value="A * sin(3 * u + phi)">
+              </div>
+            </div>
+            <div class="win11-card">
+              <div class="card-info">
+                <div class="card-icon">𝑌</div>
+                <div class="card-text"><div class="card-title">Y(u, t)</div></div>
+              </div>
+              <div class="card-control" style="flex: 1.2;">
+                <input type="text" id="curve-y-input" class="win11-input mono" style="width: 100%;" value="A * sin(4 * u)">
+              </div>
+            </div>
+            <div class="win11-card">
+              <div class="card-info">
+                <div class="card-icon">𝑍</div>
+                <div class="card-text"><div class="card-title">Z(u, t)</div></div>
+              </div>
+              <div class="card-control" style="flex: 1.2;">
+                <input type="text" id="curve-z-input" class="win11-input mono" style="width: 100%;" value="A * cos(5 * u)">
+              </div>
+            </div>
+          </div>
+
+          <!-- Parametric Surface Block (Hidden by default) -->
+          <div id="block-parametric-surface" style="display: none;">
+            <div class="win11-card">
+              <div class="card-info">
+                <div class="card-icon">𝑋</div>
+                <div class="card-text"><div class="card-title">X(u, v, t)</div></div>
+              </div>
+              <div class="card-control" style="flex: 1.2;">
+                <input type="text" id="surf-x-input" class="win11-input mono" style="width: 100%;" value="(R + 1.2*cos(v))*cos(u)">
+              </div>
+            </div>
+            <div class="win11-card">
+              <div class="card-info">
+                <div class="card-icon">𝑌</div>
+                <div class="card-text"><div class="card-title">Y(u, v, t)</div></div>
+              </div>
+              <div class="card-control" style="flex: 1.2;">
+                <input type="text" id="surf-y-input" class="win11-input mono" style="width: 100%;" value="(R + 1.2*cos(v))*sin(u)">
+              </div>
+            </div>
+            <div class="win11-card">
+              <div class="card-info">
+                <div class="card-icon">𝑍</div>
+                <div class="card-text"><div class="card-title">Z(u, v, t)</div></div>
+              </div>
+              <div class="card-control" style="flex: 1.2;">
+                <input type="text" id="surf-z-input" class="win11-input mono" style="width: 100%;" value="1.2*sin(v)">
+              </div>
+            </div>
+          </div>
+
+          <!-- Vector Field Block (Hidden by default) -->
+          <div id="block-vector-field" style="display: none;">
+            <div class="win11-card">
+              <div class="card-info"><div class="card-text"><div class="card-title">U(x, y, z)</div></div></div>
+              <div class="card-control" style="flex: 1.2;"><input type="text" id="vec-u-input" class="win11-input mono" style="width: 100%;" value="-y"></div>
+            </div>
+            <div class="win11-card">
+              <div class="card-info"><div class="card-text"><div class="card-title">V(x, y, z)</div></div></div>
+              <div class="card-control" style="flex: 1.2;"><input type="text" id="vec-v-input" class="win11-input mono" style="width: 100%;" value="x"></div>
+            </div>
+            <div class="win11-card">
+              <div class="card-info"><div class="card-text"><div class="card-title">W(x, y, z)</div></div></div>
+              <div class="card-control" style="flex: 1.2;"><input type="text" id="vec-w-input" class="win11-input mono" style="width: 100%;" value="0.3 * z * sin(t)"></div>
+            </div>
+          </div>
+
+          <!-- Formula Preview HUD Card -->
+          <div class="win11-card" style="background: rgba(0, 120, 212, 0.08); border-color: rgba(0, 120, 212, 0.25);">
+            <div class="card-info">
+              <div class="card-icon">∑</div>
+              <div class="card-text">
+                <div class="card-title">公式实时 LaTeX 解析预览</div>
+                <div id="katex-studio-preview" style="margin-top: 6px; font-size: 15px;"></div>
+              </div>
+            </div>
+            <div class="card-control">
+              <button id="apply-expression-btn" class="win11-btn primary">• 应用更新</button>
+            </div>
+          </div>
+
+          <div class="section-group-title">自变量定义域与网格密度</div>
+
+          <!-- Domain Range Card -->
+          <div class="win11-card">
+            <div class="card-info">
+              <div class="card-icon">↔</div>
+              <div class="card-text">
+                <div class="card-title">X 定义域范围 [Xmin, Xmax]</div>
+                <div class="card-desc">指定自变量 X 的绘制边界</div>
+              </div>
+            </div>
+            <div class="card-control">
+              <input type="number" id="range-xmin" class="win11-input" style="width: 65px;" value="-5">
+              <span>至</span>
+              <input type="number" id="range-xmax" class="win11-input" style="width: 65px;" value="5">
+            </div>
+          </div>
+
+          <div class="win11-card">
+            <div class="card-info">
+              <div class="card-icon">↕</div>
+              <div class="card-text">
+                <div class="card-title">Y 定义域范围 [Ymin, Ymax]</div>
+                <div class="card-desc">指定自变量 Y 的绘制边界</div>
+              </div>
+            </div>
+            <div class="card-control">
+              <input type="number" id="range-ymin" class="win11-input" style="width: 65px;" value="-5">
+              <span>至</span>
+              <input type="number" id="range-ymax" class="win11-input" style="width: 65px;" value="5">
+            </div>
+          </div>
+
+          <!-- Resolution Slider -->
+          <div class="win11-card">
+            <div class="card-info">
+              <div class="card-icon">▦</div>
+              <div class="card-text">
+                <div class="card-title">曲面网格采样密度</div>
+                <div class="card-desc">控制 3D 矢量的几何细分精度</div>
+              </div>
+            </div>
+            <div class="card-control">
+              <div class="slider-group">
+                <input type="range" id="mesh-res-slider" class="win11-range" min="20" max="140" step="5" value="70">
+                <span id="mesh-res-val" class="slider-val">70x70</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Color Map Selector -->
+          <div class="win11-card">
+            <div class="card-info">
+              <div class="card-icon">🎨</div>
+              <div class="card-text">
+                <div class="card-title">高程色彩映射方案</div>
+                <div class="card-desc">根据数值高度着色</div>
+              </div>
+            </div>
+            <div class="card-control">
+              <select id="colormap-select" class="win11-select">
+                <option value="coolwarm" selected>Cool-Warm 经典冷暖</option>
+                <option value="viridis">Viridis 科学翠绿</option>
+                <option value="plasma">Plasma 霓虹紫金</option>
+                <option value="rainbow">Rainbow 七彩光谱</option>
+                <option value="neon">Neon 赛博青粉</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Wireframe Toggle -->
+          <div class="win11-card">
+            <div class="card-info">
+              <div class="card-icon">🕸️</div>
+              <div class="card-text">
+                <div class="card-title">纯矢量网格线框模式</div>
+                <div class="card-desc">隐藏实体着色，仅显示三维矢量骨架</div>
+              </div>
+            </div>
+            <div class="card-control">
+              <label class="win11-toggle">
+                <input type="checkbox" id="wireframe-toggle">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- --------------------------------------------------------------
+             Page 2: 关键帧与复合函数动画 (Keyframes & Motion)
+             -------------------------------------------------------------- -->
+        <div class="page-section" id="sec-keyframes">
+          <div class="page-breadcrumbs">
+            <span>设置</span> <span>›</span> <span>关键帧与复合函数动画</span>
+          </div>
+          <h2 class="page-title">• 关键帧与复合函数动画</h2>
+
+          <div class="section-group-title">动画全局时间轴</div>
+
+          <div class="win11-card">
+            <div class="card-info">
+              <div class="card-icon">⏳</div>
+              <div class="card-text">
+                <div class="card-title">动画总时长 (秒)</div>
+                <div class="card-desc">定义关键帧动画的时间跨度</div>
+              </div>
+            </div>
+            <div class="card-control">
+              <input type="number" id="timeline-duration-input" class="win11-input" style="width: 80px;" value="8.0" min="1" max="60" step="0.5">
+            </div>
+          </div>
+
+          <div class="win11-card">
+            <div class="card-info">
+              <div class="card-icon">🔁</div>
+              <div class="card-text">
+                <div class="card-title">循环往复播放</div>
+                <div class="card-desc">播放至终点后自动回到起始位置</div>
+              </div>
+            </div>
+            <div class="card-control">
+              <label class="win11-toggle">
+                <input type="checkbox" id="timeline-loop-toggle" checked>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="section-group-title" style="display: flex; justify-content: space-between; align-items: center;">
+            <span>动态参数与关键帧管理</span>
+            <button id="add-param-btn" class="win11-btn sm primary">+ 新建自定义参数</button>
+          </div>
+
+          <!-- Parameter Manager List -->
+          <div id="param-list-container" class="param-card-list">
+            <!-- Dynamically populated parameters -->
+          </div>
+
+          <!-- Keyframe Transition Customizer Modal/Expander -->
+          <div class="win11-expander open" style="margin-top: 18px;">
+            <div class="expander-header">
+              <div class="card-info">
+                <div class="card-icon">🔀</div>
+                <div class="card-text">
+                  <div class="card-title">任意两关键帧间：复合函数变换 g(f(τ)) 嵌套编辑器</div>
+                  <div class="card-desc">配置帧间过渡函数，实现非线性复合函数轨迹变换</div>
+                </div>
+              </div>
+              <span class="expander-chevron">▼</span>
+            </div>
+            <div class="expander-content" style="padding-top: 14px;">
+              <p style="font-size: 12px; color: var(--win-text-secondary); margin-bottom: 12px;">
+                当时间在两关键帧 [t₁, t₂] 之间前进时，标准化进度 τ = (t - t₁)/(t₂ - t₁) ∈ [0, 1]。参数值按复合函数 V(t) = V₁ + (V₂ - V₁) · g(f(τ)) 变换。
+              </p>
+
+              <div class="win11-card">
+                <div class="card-info">
+                  <div class="card-text">
+                    <div class="card-title">预设复合过渡函数</div>
+                  </div>
+                </div>
+                <div class="card-control">
+                  <select id="transition-preset-select" class="win11-select">
+                    <option value="linear">线性过渡 (Linear: x)</option>
+                    <option value="smooth" selected>S型平滑 (Smooth Ease: sin(pi/2 * x^2))</option>
+                    <option value="harmonic">阻尼谐振复合 (Damped Harmonic: sin(4*pi*x)*exp(-3*x) + x)</option>
+                    <option value="bounce">多重弹跳 (Bounce: abs(sin(3*pi*x))*(1-x) + x)</option>
+                    <option value="sigmoid">Sigmoid 陡峭跃迁 (1 / (1 + exp(-10*(x-0.5))))</option>
+                    <option value="custom">★ 用户自定义嵌套复合公式</option>
+                  </select>
+                </div>
+              </div>
+
+              <div id="custom-transition-inputs">
+                <div class="win11-card">
+                  <div class="card-info">
+                    <div class="card-text">
+                      <div class="card-title">外层函数 g(u)</div>
+                      <div class="card-desc">以 u 为自变量的外部包裹函数</div>
+                    </div>
+                  </div>
+                  <div class="card-control" style="flex: 1.2;">
+                    <input type="text" id="outer-func-input" class="win11-input mono" style="width: 100%;" value="sin(pi/2 * x)">
+                  </div>
+                </div>
+
+                <div class="win11-card">
+                  <div class="card-info">
+                    <div class="card-text">
+                      <div class="card-title">内层嵌套函数 f(τ)</div>
+                      <div class="card-desc">以 x (进度 τ) 为自变量的内部函数</div>
+                    </div>
+                  </div>
+                  <div class="card-control" style="flex: 1.2;">
+                    <input type="text" id="inner-func-input" class="win11-input mono" style="width: 100%;" value="x^2">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Realtime Curve Preview Canvas -->
+              <div style="background: #181818; border-radius: 6px; padding: 10px; margin-top: 8px;">
+                <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--win-text-secondary); margin-bottom: 6px;">
+                  <span>复合变换曲线预览: h(τ) = g(f(τ))</span>
+                  <span id="trans-curve-formula-badge" style="color: var(--win-accent);">h(τ) = sin(π/2 · τ²)</span>
+                </div>
+                <canvas id="transition-curve-canvas" width="500" height="90" style="width: 100%; height: 90px;"></canvas>
+              </div>
+
+              <div style="margin-top: 12px; text-align: right;">
+                <button id="apply-transition-btn" class="win11-btn primary sm">应用此过渡至选中关键帧</button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- --------------------------------------------------------------
+             Page 3: 微积分与高等数学 (Calculus & Analysis)
+             -------------------------------------------------------------- -->
+        <div class="page-section" id="sec-calculus">
+          <div class="page-breadcrumbs">
+            <span>设置</span> <span>›</span> <span>微积分与高等数学</span>
+          </div>
+          <h2 class="page-title">• 微积分与高等数学分析</h2>
+
+          <div class="section-group-title">符号导数与偏导数 (SymPy 核心)</div>
+
+          <div class="win11-card">
+            <div class="card-info">
+              <div class="card-icon">𝜕</div>
+              <div class="card-text">
+                <div class="card-title">偏导数 ∂z/∂x 与 ∂z/∂y</div>
+                <div class="card-desc">利用符号代数引擎解析曲面各方向变化率</div>
+              </div>
+            </div>
+            <div class="card-control">
+              <button id="calc-partials-btn" class="win11-btn primary">• 立即求偏导</button>
+            </div>
+          </div>
+
+          <!-- Calculus Results Card -->
+          <div class="win11-card" id="card-partials-result" style="display: none; background: rgba(0, 120, 212, 0.08);">
+            <div class="card-info">
+              <div class="card-text" style="width: 100%;">
+                <div class="card-title">符号解析结果</div>
+                <div id="partials-katex-out" style="margin-top: 8px; font-size: 14.5px; line-height: 1.8;"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-group-title">三维切平面与梯度矢量场可视化</div>
+
+          <!-- Tangent Plane Card -->
+          <div class="win11-card">
+            <div class="card-info">
+              <div class="card-icon">🎯</div>
+              <div class="card-text">
+                <div class="card-title">切平面可视化 (Tangent Plane)</div>
+                <div class="card-desc">在三维曲面上指定切点并绘制一阶线性近似平面</div>
+              </div>
+            </div>
+            <div class="card-control">
+              <label class="win11-toggle">
+                <input type="checkbox" id="tangent-plane-toggle">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Tangent Coordinates Input -->
+          <div class="win11-card">
+            <div class="card-info">
+              <div class="card-text">
+                <div class="card-title">切点坐标 (x₀, y₀)</div>
+                <div class="card-desc">动态移动切点观察切平面姿态</div>
+              </div>
+            </div>
+            <div class="card-control">
+              <span>X₀:</span>
+              <input type="number" id="tangent-x0" class="win11-input" style="width: 65px;" value="1.0" step="0.5">
+              <span>Y₀:</span>
+              <input type="number" id="tangent-y0" class="win11-input" style="width: 65px;" value="1.0" step="0.5">
+            </div>
+          </div>
+
+          <!-- Gradient Field Toggle -->
+          <div class="win11-card">
+            <div class="card-info">
+              <div class="card-icon">↗</div>
+              <div class="card-text">
+                <div class="card-title">梯度矢量场 ∇f = (∂z/∂x, ∂z/∂y)</div>
+                <div class="card-desc">高亮曲面上最陡上升方向的矢量箭头</div>
+              </div>
+            </div>
+            <div class="card-control">
+              <label class="win11-toggle">
+                <input type="checkbox" id="gradient-field-toggle">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="section-group-title">积分计算与黎曼和</div>
+
+          <div class="win11-card">
+            <div class="card-info">
+              <div class="card-icon">∫</div>
+              <div class="card-text">
+                <div class="card-title">定积分 / 不定积分计算</div>
+                <div class="card-desc">对选定自变量求积分并返回原函数与数值积分</div>
+              </div>
+            </div>
+            <div class="card-control">
+              <button id="calc-integral-btn" class="win11-btn primary">• 执行积分运算</button>
+            </div>
+          </div>
+
+          <div class="win11-card" id="card-integral-result" style="display: none; background: rgba(0, 120, 212, 0.08);">
+            <div class="card-info">
+              <div class="card-text" style="width: 100%;">
+                <div class="card-title">积分解析结果</div>
+                <div id="integral-katex-out" style="margin-top: 8px; font-size: 14.5px;"></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- --------------------------------------------------------------
+             Page 4: 预设库与多波混合 (Presets & Fourier)
+             -------------------------------------------------------------- -->
+        <div class="page-section" id="sec-presets">
+          <div class="page-breadcrumbs">
+            <span>设置</span> <span>›</span> <span>预设库与多波混合</span>
+          </div>
+          <h2 class="page-title">• 预设库与多波混合</h2>
+
+          <div class="section-group-title">经典动画预设快速载入</div>
+
+          <div class="win11-card">
+            <div class="card-info">
+              <div class="card-icon">📚</div>
+              <div class="card-text">
+                <div class="card-title">内置经典数学模型库</div>
+                <div class="card-desc">一键载入圆、球面、环面、水波、傅里叶合成或李萨如</div>
+              </div>
+            </div>
+            <div class="card-control">
+              <select id="preset-selector" class="win11-select">
+                <!-- Builtin options -->
+              </select>
+              <button id="load-preset-btn" class="win11-btn primary">载入预设</button>
+            </div>
+          </div>
+
+          <!-- Preset Detail Card -->
+          <div class="win11-card" id="preset-desc-card">
+            <div class="card-info">
+              <div class="card-text">
+                <div class="card-title" id="preset-detail-title">水波干涉曲面</div>
+                <div class="card-desc" id="preset-detail-desc">向外发散并衰减的圆形波纹干涉</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-group-title">多预设动态混合合成器 (Preset Blender)</div>
+
+          <div class="win11-card">
+            <div class="card-info">
+              <div class="card-icon">🧬</div>
+              <div class="card-text">
+                <div class="card-title">基准预设 A</div>
+              </div>
+            </div>
+            <div class="card-control">
+              <select id="mix-preset-a" class="win11-select"></select>
+            </div>
+          </div>
+
+          <div class="win11-card">
+            <div class="card-info">
+              <div class="card-icon">🧬</div>
+              <div class="card-text">
+                <div class="card-title">叠加预设 B</div>
+              </div>
+            </div>
+            <div class="card-control">
+              <select id="mix-preset-b" class="win11-select"></select>
+            </div>
+          </div>
+
+          <div class="win11-card">
+            <div class="card-info">
+              <div class="card-icon">⚗️</div>
+              <div class="card-text">
+                <div class="card-title">融合模式 (Blend Mode)</div>
+                <div class="card-desc">指定两种图形的混合运算逻辑</div>
+              </div>
+            </div>
+            <div class="card-control">
+              <select id="mix-mode-select" class="win11-select">
+                <option value="morph" selected>形变过渡 (Morphing: (1-α)A + αB)</option>
+                <option value="superposition">波动干涉叠加 (Superposition: A + B)</option>
+                <option value="modulation">乘积调幅 (Modulation: A × B)</option>
+                <option value="envelope">高斯包络卷积 (Envelope: A · e^(-B²/4))</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="win11-card">
+            <div class="card-info">
+              <div class="card-text">
+                <div class="card-title">混合系数 α 实时控制</div>
+                <div class="card-desc">0 为完全预设 A，1 为完全预设 B</div>
+              </div>
+            </div>
+            <div class="card-control">
+              <div class="slider-group">
+                <input type="range" id="blend-alpha-slider" class="win11-range" min="0" max="1" step="0.02" value="0.5">
+                <span id="blend-alpha-val" class="slider-val">0.50</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="text-align: right; margin-top: 10px;">
+            <button id="apply-mix-btn" class="win11-btn primary">合成并创建混合动画</button>
+          </div>
+
+          <div class="section-group-title">傅里叶级数 3D 旋转相量链 (Epicycles)</div>
+
+          <div class="win11-card">
+            <div class="card-info">
+              <div class="card-icon">💫</div>
+              <div class="card-text">
+                <div class="card-title">3D 傅里叶旋转矢量链</div>
+                <div class="card-desc">在三维空间中高亮展示各次谐波的旋转圆与矢量相加手臂</div>
+              </div>
+            </div>
+            <div class="card-control">
+              <label class="win11-toggle">
+                <input type="checkbox" id="fourier-epicycles-toggle">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- --------------------------------------------------------------
+             Page 5: 代码生成与视频导出 (Code & MP4 Export)
+             -------------------------------------------------------------- -->
+        <div class="page-section" id="sec-export">
+          <div class="page-breadcrumbs">
+            <span>设置</span> <span>›</span> <span>代码生成与视频导出</span>
+          </div>
+          <h2 class="page-title">• 代码生成与视频导出</h2>
+
+          <div class="section-group-title">独立动画代码生成</div>
+
+          <div class="win11-card">
+            <div class="card-info">
+              <div class="card-icon">⚡</div>
+              <div class="card-text">
+                <div class="card-title">当前动画完整源码导出</div>
+                <div class="card-desc">实时生成可脱离本工具运行的纯净源码</div>
+              </div>
+            </div>
+            <div class="card-control">
+              <button id="copy-code-btn" class="win11-btn">• 复制代码</button>
+              <button id="save-code-btn" class="win11-btn primary">• 保存源码文件</button>
+            </div>
+          </div>
+
+          <!-- Code Box Container -->
+          <div class="code-container">
+            <div class="code-header">
+              <div class="code-tabs">
+                <button class="code-tab-btn active" data-lang="threejs">HTML5 + Three.js</button>
+                <button class="code-tab-btn" data-lang="python">Python (Matplotlib 3D)</button>
+              </div>
+              <span style="font-size: 11px; color: var(--win-text-secondary);" id="code-lang-label">JavaScript</span>
+            </div>
+            <pre class="code-box" id="generated-code-box">// 正在实时生成代码...</pre>
+          </div>
+
+          <div class="section-group-title">高清 .mp4 视频导出 (FFmpeg 硬件管线)</div>
+
+          <div class="win11-card">
+            <div class="card-info">
+              <div class="card-icon">🎬</div>
+              <div class="card-text">
+                <div class="card-title">视频导出分辨率</div>
+              </div>
+            </div>
+            <div class="card-control">
+              <select id="export-res-select" class="win11-select">
+                <option value="1920x1080" selected>1080P 全高清 (1920 × 1080)</option>
+                <option value="1280x720">720P 高清 (1280 × 720)</option>
+                <option value="2560x1440">2K 超清 (2560 × 1440)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="win11-card">
+            <div class="card-info">
+              <div class="card-icon">🎞️</div>
+              <div class="card-text">
+                <div class="card-title">视频导出帧率 (FPS)</div>
+              </div>
+            </div>
+            <div class="card-control">
+              <select id="export-fps-select" class="win11-select">
+                <option value="60" selected>60 FPS (高平滑度)</option>
+                <option value="30">30 FPS (标准速度)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Export Action Card -->
+          <div class="win11-card" style="background: rgba(0, 120, 212, 0.08); border-color: rgba(0, 120, 212, 0.3);">
+            <div class="card-info">
+              <div class="card-icon">🚀</div>
+              <div class="card-text">
+                <div class="card-title">一键转换为 .mp4 视频文件</div>
+                <div class="card-desc">自动逐帧高质量渲染并调用本地 FFmpeg 编码封装</div>
+              </div>
+            </div>
+            <div class="card-control">
+              <button id="start-mp4-export-btn" class="win11-btn primary">• 开始导出 .mp4 视频</button>
+            </div>
+          </div>
+
+          <!-- Export Progress Bar Card -->
+          <div class="win11-card" id="export-progress-card" style="display: none; flex-direction: column; align-items: stretch; gap: 8px;">
+            <div style="display: flex; justify-content: space-between; font-size: 13px;">
+              <span id="export-status-text">正在逐帧渲染并编码视频...</span>
+              <span id="export-percent-text" style="font-family: var(--win-font-mono); font-weight: bold; color: var(--win-accent);">0%</span>
+            </div>
+            <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
+              <div id="export-progress-bar" style="width: 0%; height: 100%; background: var(--win-accent); transition: width 0.1s ease;"></div>
+            </div>
+            <div id="export-finish-actions" style="display: none; justify-content: flex-end; gap: 10px; margin-top: 6px;">
+              <button id="open-video-folder-btn" class="win11-btn sm">• 打开视频所在文件夹</button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- --------------------------------------------------------------
+             Page 6: 首选项与视口设置 (Settings & Preferences)
+             -------------------------------------------------------------- -->
+        <div class="page-section" id="sec-preferences">
+          <div class="page-breadcrumbs">
+            <span>设置</span> <span>›</span> <span>首选项与视口设置</span>
+          </div>
+          <h2 class="page-title">• 首选项与视口渲染设置</h2>
+
+          <div class="section-group-title">视口辅助显示</div>
+
+          <div class="win11-card">
+            <div class="card-info">
+              <div class="card-icon">🧭</div>
+              <div class="card-text">
+                <div class="card-title">三维矢量坐标轴 (X: 红, Y: 绿, Z: 蓝)</div>
+                <div class="card-desc">显示带有箭头与刻度的空间坐标矢量</div>
+              </div>
+            </div>
+            <div class="card-control">
+              <label class="win11-toggle">
+                <input type="checkbox" id="pref-axes-toggle" checked>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="win11-card">
+            <div class="card-info">
+              <div class="card-icon">🏁</div>
+              <div class="card-text">
+                <div class="card-title">空间参考网格 (Ground Grid)</div>
+                <div class="card-desc">显示水平基准网格平面</div>
+              </div>
+            </div>
+            <div class="card-control">
+              <label class="win11-toggle">
+                <input type="checkbox" id="pref-grid-toggle" checked>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="section-group-title">系统环境检测</div>
+
+          <div class="win11-card">
+            <div class="card-info">
+              <div class="card-icon">ℹ️</div>
+              <div class="card-text">
+                <div class="card-title">本地运行组件环境</div>
+                <div class="card-desc" id="env-status-desc">Python 3.13, SymPy 符号引擎, Three.js WebGL2, FFmpeg 8.1 硬件编码器已就绪</div>
+              </div>
+            </div>
+            <div class="card-control">
+              <span style="font-size: 12px; color: #00ff88; font-weight: bold;">● 全部就绪</span>
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
+      <!-- Right 3D Viewport Pane -->
+      <section class="viewport-pane">
+
+        <div id="viewport-canvas-container">
+          <!-- Canvas injected here by Three.js -->
+        </div>
+
+        <!-- Top Floating HUD -->
+        <div class="viewport-hud-top">
+          <div class="viewport-formula-badge">
+            <span style="color: var(--win-accent); font-weight: 600;">当前函数:</span>
+            <div id="hud-formula-render" class="formula-render"></div>
+          </div>
+
+          <div class="viewport-tools-group">
+            <button id="view-iso-btn" class="hud-btn active" title="重置为三维等轴透视视角">3D</button>
+            <button id="view-top-btn" class="hud-btn" title="顶视图 (XY 投影)">俯视</button>
+            <button id="view-front-btn" class="hud-btn" title="前视图 (XZ 投影)">正视</button>
+            <button id="hud-wireframe-btn" class="hud-btn" title="线框网格切换">•</button>
+          </div>
+        </div>
+
+        <!-- Stats Pill -->
+        <div class="stats-badge" id="hud-stats-badge">60 FPS | WebGL2</div>
+
+        <!-- Bottom Floating Playback & Timeline Bar -->
+        <div class="viewport-timeline">
+          <div class="playback-controls">
+            <button id="time-step-back-btn" class="hud-btn" title="步退 0.2s">⏮</button>
+            <button id="play-pause-btn" class="hud-btn active" title="播放 / 暂停" style="width: 38px; height: 38px; font-size: 16px;">▶</button>
+            <button id="time-step-fwd-btn" class="hud-btn" title="步进 0.2s">⏭</button>
+          </div>
+
+          <div class="timeline-scrubber">
+            <span class="time-indicator" id="time-display-label">0.00s / 8.00s</span>
+            <input type="range" id="timeline-scrubber-slider" class="win11-range" min="0" max="8.0" step="0.02" value="0">
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <select id="playback-speed-select" class="win11-select" style="padding: 3px 8px; font-size: 11px;">
+              <option value="0.5">0.5x</option>
+              <option value="1.0" selected>1.0x</option>
+              <option value="1.5">1.5x</option>
+              <option value="2.0">2.0x</option>
+            </select>
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+
+  </div>
+  </div><!-- /#page-studio -->
+
+  <!-- In-app Modal (prompt / confirm replacement; pywebview lacks native JS dialogs) -->
+  <div id="modal-overlay" class="modal-overlay" style="display: none;">
+    <div class="modal-box">
+      <div class="modal-title" id="modal-title">提示</div>
+      <div class="modal-message" id="modal-message"></div>
+      <input type="text" id="modal-input" class="win11-input" style="display: none; width: 100%; margin-top: 10px;">
+      <div class="modal-actions">
+        <button id="modal-cancel-btn" class="win11-btn">取消</button>
+        <button id="modal-ok-btn" class="win11-btn primary">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast notifications -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <script src="./bundle.js"></script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+env/
+
+# ---- Node ----
+node_modules/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---- Frontend build output ----
+web_dist/
+dist/
+
+# ---- PyInstaller ----
+build/
+*.spec
+*.manifest
+
+# ---- Compiled binaries ----
+*.exe
+*.dll
+*.so
+*.dylib
+
+# ---- IDE / OS ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
