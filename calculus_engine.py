@@ -1,22 +1,37 @@
 """
 Calculus Engine using SymPy for symbolic math operations.
 Provides differentiation, partial derivatives, integration, Taylor expansion, and LaTeX formatting.
+
+SymPy is imported lazily (on first use) so that application startup is not blocked by the
+slow SymPy module import. The first symbolic operation still pays the import cost once.
 """
 
-import sympy as sp
 from typing import Dict, Any, Optional
 
 class CalculusEngine:
     def __init__(self):
-        self.x, self.y, self.z, self.t, self.u, self.v = sp.symbols('x y z t u v', real=True)
-        self.symbols_dict = {
-            'x': self.x, 'y': self.y, 'z': self.z,
-            't': self.t, 'u': self.u, 'v': self.v,
-            'pi': sp.pi, 'e': sp.E
-        }
+        # Lazy-initialized SymPy state (avoids blocking startup on the slow `import sympy`).
+        self._sp = None
+        self._symbols = None
+        self.symbols_dict = None
+        self.x = self.y = self.z = self.t = self.u = self.v = None
+
+    def _ensure_sympy(self):
+        """Import SymPy and create the shared symbols on first use."""
+        if self._sp is None:
+            import sympy as sp
+            self._sp = sp
+            self.x, self.y, self.z, self.t, self.u, self.v = sp.symbols('x y z t u v', real=True)
+            self.symbols_dict = {
+                'x': self.x, 'y': self.y, 'z': self.z,
+                't': self.t, 'u': self.u, 'v': self.v,
+                'pi': sp.pi, 'e': sp.E
+            }
+        return self._sp
 
     def _parse_expr(self, expr_str: str, custom_params: Optional[Dict[str, float]] = None):
         """Parse mathematical expression into a SymPy expression."""
+        sp = self._ensure_sympy()
         clean_expr = expr_str.strip().replace('^', '**')
         # Add custom parameters if any
         local_dict = dict(self.symbols_dict)
@@ -28,11 +43,12 @@ class CalculusEngine:
 
     def differentiate(self, expr_str: str, var: str = 'x', order: int = 1, params: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
         """Compute symbolic derivative."""
+        sp = self._ensure_sympy()
         try:
             expr = self._parse_expr(expr_str, params)
             target_var = sp.symbols(var, real=True)
             diff_expr = sp.diff(expr, target_var, order)
-            
+
             return {
                 "success": True,
                 "expression": expr_str,
@@ -47,6 +63,7 @@ class CalculusEngine:
 
     def partial_derivatives(self, expr_str: str, params: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
         """Compute partial derivatives dz/dx, dz/dy and gradient vector for 3D surfaces."""
+        sp = self._ensure_sympy()
         try:
             expr = self._parse_expr(expr_str, params)
             dz_dx = sp.diff(expr, self.x)
@@ -54,7 +71,7 @@ class CalculusEngine:
             dz_dx2 = sp.diff(dz_dx, self.x)
             dz_dy2 = sp.diff(dz_dy, self.y)
             dz_dxdy = sp.diff(dz_dx, self.y)
-            
+
             return {
                 "success": True,
                 "dz_dx": str(dz_dx).replace('**', '^'),
@@ -76,10 +93,11 @@ class CalculusEngine:
 
     def integrate(self, expr_str: str, var: str = 'x', lower: Optional[float] = None, upper: Optional[float] = None, params: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
         """Compute indefinite or definite integral."""
+        sp = self._ensure_sympy()
         try:
             expr = self._parse_expr(expr_str, params)
             target_var = sp.symbols(var, real=True)
-            
+
             if lower is not None and upper is not None:
                 # Definite integral
                 integral_res = sp.integrate(expr, (target_var, lower, upper))
@@ -109,11 +127,12 @@ class CalculusEngine:
 
     def taylor_series(self, expr_str: str, var: str = 'x', x0: float = 0.0, order: int = 4, params: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
         """Compute Taylor series expansion around x0."""
+        sp = self._ensure_sympy()
         try:
             expr = self._parse_expr(expr_str, params)
             target_var = sp.symbols(var, real=True)
             series = expr.series(target_var, x0, order).removeO()
-            
+
             return {
                 "success": True,
                 "result_str": str(series).replace('**', '^'),

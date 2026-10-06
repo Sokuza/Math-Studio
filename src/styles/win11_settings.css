@@ -83,7 +83,9 @@ body, html {
    -------------------------------------------------------------------------- */
 .sidebar {
   width: 290px;
-  min-width: 290px;
+  min-width: 200px;
+  max-width: 460px;
+  flex: none;
   background-color: var(--win-sidebar-bg);
   border-right: 1px solid var(--win-border-subtle);
   display: flex;
@@ -258,9 +260,10 @@ body, html {
 }
 
 .content-pane {
-  flex: 1.1;
-  max-width: 620px;
-  min-width: 480px;
+  flex: none;
+  width: 520px;
+  max-width: 780px;
+  min-width: 360px;
   overflow-y: auto;
   padding: 28px 32px 60px 32px;
   border-right: 1px solid var(--win-border-subtle);
@@ -480,6 +483,30 @@ body, html {
   font-family: var(--win-font-mono);
 }
 
+/* --------------------------------------------------------------------------
+   Dropdown (select) backgrounds: keep them dark gray in dark mode so the
+   closed control and its option list do not appear white and clash with text.
+   -------------------------------------------------------------------------- */
+[data-theme="dark"] .win11-select {
+  background-color: #2b2b2b;
+  color: #ffffff;
+}
+[data-theme="dark"] .win11-select option {
+  background-color: #2b2b2b;
+  color: #ffffff;
+}
+[data-theme="dark"] .win11-select:hover {
+  background-color: #343434;
+}
+[data-theme="light"] .win11-select {
+  background-color: #ffffff;
+  color: #1c1c1c;
+}
+[data-theme="light"] .win11-select option {
+  background-color: #ffffff;
+  color: #1c1c1c;
+}
+
 /* Win11 Range Slider */
 .slider-group {
   display: flex;
@@ -571,7 +598,8 @@ body, html {
    3D Viewport Panel (Right Side)
    -------------------------------------------------------------------------- */
 .viewport-pane {
-  flex: 1.4;
+  flex: 1;
+  min-width: 320px;
   height: 100vh;
   position: relative;
   background: #111111;
@@ -580,11 +608,18 @@ body, html {
   overflow: hidden;
 }
 
-#viewport-canvas-container {
+.viewport-canvas-wrap {
   flex: 1;
+  position: relative;
+  min-height: 160px;
+  overflow: hidden;
+}
+
+#viewport-canvas-container {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  position: relative;
 }
 
 #three-canvas {
@@ -701,7 +736,7 @@ body, html {
 /* FPS / Stats Pill */
 .stats-badge {
   position: absolute;
-  bottom: 80px;
+  bottom: 12px;
   left: 20px;
   background: rgba(0,0,0,0.6);
   backdrop-filter: blur(8px);
@@ -1088,4 +1123,165 @@ body, html {
 @keyframes toastIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* ==========================================================================
+   Resizable workspace splitters
+   ========================================================================== */
+.splitter {
+  flex: none;
+  position: relative;
+  z-index: 20;
+  background: #242424;
+  transition: background 0.12s ease;
+}
+.splitter-v {
+  width: 5px;
+  cursor: col-resize;
+  border-left: 1px solid var(--win-border-subtle);
+  border-right: 1px solid var(--win-border-subtle);
+}
+.splitter-h {
+  height: 5px;
+  cursor: row-resize;
+  border-top: 1px solid var(--win-border-subtle);
+  border-bottom: 1px solid var(--win-border-subtle);
+}
+.splitter:hover,
+.splitter.dragging {
+  background: var(--win-accent);
+}
+
+/* ==========================================================================
+   Keyframe Timeline Editor Panel (below the 3D viewport)
+   ========================================================================== */
+.timeline-panel {
+  flex: none;
+  height: 240px;
+  min-height: 140px;
+  max-height: 65vh;
+  display: flex;
+  flex-direction: column;
+  background: #151515;
+  border-top: 1px solid var(--win-border-subtle);
+}
+
+.timeline-toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 14px;
+  background: #1c1c1c;
+  border-bottom: 1px solid #2a2a2a;
+  flex-wrap: wrap;
+}
+
+.timeline-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.timeline-tool-label {
+  font-size: 12px;
+  color: var(--win-text-secondary);
+  white-space: nowrap;
+}
+
+.timeline-canvas-wrap {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: #151515;
+}
+
+.timeline-canvas {
+  display: block;
+}
+
+/* ==========================================================================
+   Camera Control Panel (floating inside the 3D viewport)
+   ========================================================================== */
+.camera-panel {
+  position: absolute;
+  top: 60px;
+  right: 16px;
+  width: 292px;
+  background: rgba(28, 28, 28, 0.92);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--win-radius-lg);
+  padding: 14px;
+  z-index: 9;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+}
+
+.camera-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 10px;
+  color: var(--win-text-primary);
+}
+
+.camera-close {
+  background: transparent;
+  border: none;
+  color: var(--win-text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.camera-close:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+
+.camera-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.camera-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.camera-row .camera-label {
+  width: 52px;
+  flex: none;
+  font-size: 12px;
+  color: var(--win-text-secondary);
+}
+
+.camera-row .win11-input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+}
+
+.camera-row .win11-range {
+  flex: 1;
+}
+
+.camera-view-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.camera-autorotate {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--win-text-primary);
+  cursor: pointer;
+  user-select: none;
 }

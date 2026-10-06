@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Math Studio — Loading</title>
+  <style>
+    :root {
+      --accent: #0078d4;
+      --accent-bright: #4db8ff;
+      --text: #e8e8e8;
+      --text-dim: #9a9a9a;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: #000;
+      font-family: 'Segoe UI', 'Segoe UI Variable', sans-serif;
+      -webkit-user-select: none;
+      user-select: none;
+      cursor: default;
+    }
+
+    /* Video area: top 75% of the window (keeps the 16:9 video region).
+       The window itself is 4:3, so 100% x 75% = 16:9. */
+    .video-stage {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 75%;
+      background: #000;
+      overflow: hidden;
+    }
+    #load-video {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+      background: #000;
+    }
+
+    /* Extended bottom strip: 25% height, black, holds progress + percentage. */
+    .status-stage {
+      position: absolute;
+      top: 75%; left: 0;
+      width: 100%;
+      height: 25%;
+      background: #000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: clamp(6px, 1.6vh, 22px);
+    }
+
+    .brand {
+      font-size: clamp(12px, 4.5vmin, 34px);
+      font-weight: 600;
+      letter-spacing: 0.25em;
+      color: var(--text);
+      white-space: nowrap;
+    }
+    .brand .m { color: var(--accent-bright); }
+
+    .percentage {
+      font-size: clamp(20px, 8vmin, 72px);
+      font-weight: 300;
+      font-variant-numeric: tabular-nums;
+      color: var(--text);
+      letter-spacing: 0.04em;
+      line-height: 1;
+    }
+
+    .progress-track {
+      width: min(64%, 640px);
+      height: clamp(4px, 0.9vh, 8px);
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.14);
+      overflow: hidden;
+    }
+    .progress-fill {
+      width: 0%;
+      height: 100%;
+      border-radius: 4px;
+      background: linear-gradient(90deg, #0078d4, #4db8ff);
+      box-shadow: 0 0 14px rgba(77, 184, 255, 0.7);
+      transition: width 0.05s linear;
+    }
+
+    .hint {
+      font-size: clamp(8px, 1.7vmin, 15px);
+      letter-spacing: 0.15em;
+      color: var(--text-dim);
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="video-stage">
+    <video id="load-video" src="assets/load_anima.mp4" autoplay muted playsinline loop preload="auto"></video>
+  </div>
+
+  <div class="status-stage">
+    <div class="brand"><span class="m">M</span>ATH&nbsp;STUDIO</div>
+    <div class="percentage" id="progress-pct">0%</div>
+    <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+    <div class="hint">正在初始化数学引擎与三维渲染环境…</div>
+  </div>
+
+  <script>
+    (function () {
+      var video = document.getElementById('load-video');
+      var fill = document.getElementById('progress-fill');
+      var pct = document.getElementById('progress-pct');
+
+      var DURATION = 5000; // 5 seconds, matches the source video
+      var startTime = null;
+      var finished = false;
+
+      function signalPython() {
+        try {
+          if (window.pywebview && window.pywebview.api && window.pywebview.api.finish_loading) {
+            window.pywebview.api.finish_loading();
+            return true;
+          }
+        } catch (e) {}
+        return false;
+      }
+
+      function finish() {
+        if (finished) return;
+        // Only mark finished once we actually signalled Python; otherwise keep
+        // retrying briefly in case the bridge isn't ready yet.
+        if (!signalPython()) return;
+        finished = true;
+      }
+
+      function tick(now) {
+        if (startTime === null) startTime = now;
+        var elapsed = now - startTime;
+        var p = Math.min(1, elapsed / DURATION);
+        fill.style.width = (p * 100).toFixed(2) + '%';
+        pct.textContent = Math.round(p * 100) + '%';
+        if (p >= 1) {
+          finish();
+        }
+        // Keep animating (retry signal) until finished, then stop updating.
+        if (!finished) requestAnimationFrame(tick);
+      }
+
+      var playPromise = video.play();
+      if (playPromise && playPromise.catch) {
+        playPromise.catch(function () { /* ignore autoplay rejection; timer still runs */ });
+      }
+
+      requestAnimationFrame(tick);
+
+      // Safety nets (each retries the signal in case the api wasn't ready yet).
+      var retryTimer = setInterval(function () {
+        if (finished) { clearInterval(retryTimer); return; }
+        finish();
+      }, 250);
+      // Stop retrying after a while; the Python watchdog then takes over.
+      setTimeout(function () { clearInterval(retryTimer); }, DURATION + 2000);
+    })();
+  </script>
+</body>
+</html>

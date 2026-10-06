@@ -13,10 +13,14 @@ export class Viewport3D {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x181818);
 
-    // Camera
-    const aspect = this.container.clientWidth / this.container.clientHeight;
-    this.camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 1000);
+    // Camera. Guard against a zero-sized (hidden) container which would otherwise
+    // produce a NaN aspect ratio and break the initial projection matrix.
+    const cw = this.container.clientWidth || 1;
+    const ch = this.container.clientHeight || 1;
+    this.camera = new THREE.PerspectiveCamera(45, cw / ch, 0.1, 1000);
     this.camera.position.set(12, 12, 14);
+    this.cameraTarget = new THREE.Vector3(0, 0, 0);
+    this.camera.lookAt(this.cameraTarget);
 
     // Renderer
     this.renderer = new THREE.WebGLRenderer({
@@ -24,7 +28,7 @@ export class Viewport3D {
       preserveDrawingBuffer: true,
       powerPreference: "high-performance"
     });
-    this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+    this.renderer.setSize(cw, ch);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
     this.container.appendChild(this.renderer.domElement);
@@ -33,6 +37,12 @@ export class Viewport3D {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.05;
+    this.controls.enablePan = true;
+    this.controls.screenSpacePanning = true;
+    this.controls.minDistance = 2;
+    this.controls.maxDistance = 200;
+    this.controls.target.copy(this.cameraTarget);
+    this.autoRotate = false;
 
     // Lighting
     this.setupLighting();
@@ -129,6 +139,100 @@ export class Viewport3D {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height);
+  }
+
+  // --- Camera Control System ---
+  getCameraState() {
+    return {
+      position: { x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z },
+      target: { x: this.controls.target.x, y: this.controls.target.y, z: this.controls.target.z },
+      fov: this.camera.isPerspectiveCamera ? this.camera.fov : 45,
+      projection: this.options.isOrthographic ? 'orthographic' : 'perspective',
+      autoRotate: this.autoRotate
+    };
+  }
+
+  setCameraPosition(x, y, z) {
+    this.camera.position.set(x, y, z);
+    this.camera.lookAt(this.controls.target);
+    this.controls.update();
+  }
+
+  setCameraTarget(x, y, z) {
+    this.controls.target.set(x, y, z);
+    this.camera.lookAt(this.controls.target);
+    this.controls.update();
+  }
+
+  setFov(fov) {
+    const clamped = Math.max(5, Math.min(120, fov));
+    if (this.camera.isPerspectiveCamera) {
+      this.camera.fov = clamped;
+      this.camera.updateProjectionMatrix();
+    }
+  }
+
+  setProjection(mode) {
+    const isOrtho = mode === 'orthographic';
+    if (isOrtho === this.options.isOrthographic) return;
+    const width = this.container.clientWidth || 1;
+    const height = this.container.clientHeight || 1;
+    const aspect = width / height;
+    const position = this.camera.position.clone();
+    const target = this.controls.target.clone();
+
+    let newCamera;
+    if (isOrtho) {
+      const extent = 16;
+      newCamera = new THREE.OrthographicCamera(
+        -extent * aspect, extent * aspect, extent, -extent, 0.1, 500
+      );
+    } else {
+      newCamera = new THREE.PerspectiveCamera(45, aspect, 0.1, 1000);
+    }
+    newCamera.position.copy(position);
+    this.camera = newCamera;
+    this.camera.lookAt(target);
+    this.options.isOrthographic = isOrtho;
+    this.controls.object = this.camera;
+    this.controls.target.copy(target);
+    this.controls.update();
+  }
+
+  setAutoRotate(enabled) {
+    this.autoRotate = !!enabled;
+    this.controls.autoRotate = !!enabled;
+    this.controls.autoRotateSpeed = 1.5;
+  }
+
+  frameAll() {
+    // Compute a bounding sphere for all visible scene content, then fit the camera to it.
+    const box = new THREE.Box3();
+    const target = this.controls.target;
+    let found = false;
+    this.scene.traverse((obj) => {
+      if (obj.isMesh || obj.isLine || obj.isLineSegments || obj.isPoints) {
+        if (obj.geometry) {
+          if (!obj.geometry.boundingBox) obj.geometry.computeBoundingBox();
+          box.expandByObject(obj);
+          found = true;
+        }
+      }
+    });
+    if (!found) {
+      this.resetCamera('iso');
+      return;
+    }
+    const sphere = box.getBoundingSphere(new THREE.Sphere());
+    const center = sphere.center;
+    const radius = Math.max(sphere.radius, 0.001);
+    const fov = this.camera.fov * (Math.PI / 180);
+    const dist = radius / Math.sin(fov / 2) * 1.3;
+    const dir = this.camera.position.clone().sub(target).normalize();
+    this.controls.target.copy(center);
+    this.camera.position.copy(center.clone().add(dir.multiplyScalar(dist)));
+    this.camera.lookAt(center);
+    this.controls.update();
   }
 
   // --- Colormap Helper ---
@@ -526,17 +630,25 @@ export class Viewport3D {
   }
 
   resetCamera(viewMode = 'iso') {
+    const d = 24;
     if (viewMode === 'top') {
-      this.camera.position.set(0, 24, 0.001);
-      this.controls.target.set(0, 0, 0);
+      this.camera.position.set(0, d, 0.001);
+    } else if (viewMode === 'bottom') {
+      this.camera.position.set(0, -d, 0.001);
     } else if (viewMode === 'front') {
-      this.camera.position.set(0, 0, 24);
-      this.controls.target.set(0, 0, 0);
+      this.camera.position.set(0, 0, d);
+    } else if (viewMode === 'back') {
+      this.camera.position.set(0, 0, -d);
+    } else if (viewMode === 'left') {
+      this.camera.position.set(-d, 0, 0.001);
+    } else if (viewMode === 'right') {
+      this.camera.position.set(d, 0, 0.001);
     } else {
       // Isometric
       this.camera.position.set(12, 12, 14);
-      this.controls.target.set(0, 0, 0);
     }
+    this.controls.target.set(0, 0, 0);
+    this.camera.lookAt(this.controls.target);
     this.controls.update();
   }
 
@@ -560,6 +672,11 @@ export class Viewport3D {
 
   animate() {
     requestAnimationFrame(this.animate);
+    // Skip rendering when the container is hidden or has no size (e.g. the studio
+    // page is not the active page), which avoids wasted GPU work and startup churn.
+    if (this.container.clientWidth === 0 || this.container.clientHeight === 0) {
+      return;
+    }
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
   }

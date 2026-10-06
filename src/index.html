@@ -57,7 +57,7 @@
     <!-- ====================================================================
          Windows 11 Left Navigation Rail (Sidebar)
          ==================================================================== -->
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
         <div class="app-icon" style="font-family: 'Times New Roman', Georgia, Cambria, serif; font-size: 24px; font-weight: bold; background: linear-gradient(135deg, #0078d4, #004578); box-shadow: 0 4px 12px rgba(0, 120, 212, 0.4);">
           <span>M</span>
@@ -117,6 +117,9 @@
         </div>
       </div>
     </aside>
+
+    <!-- Resizable splitter between sidebar and main workspace -->
+    <div class="splitter splitter-v" id="sidebar-splitter" title="拖动调整侧边栏宽度"></div>
 
     <!-- ====================================================================
          Main Workspace: Split Panes (Settings Controls + 3D Viewport)
@@ -368,28 +371,9 @@
             <div class="card-info">
               <div class="card-icon">⏳</div>
               <div class="card-text">
-                <div class="card-title">动画总时长 (秒)</div>
-                <div class="card-desc">定义关键帧动画的时间跨度</div>
+                <div class="card-title">动画总时长与循环播放</div>
+                <div class="card-desc">时长与循环开关已集成到右侧 3D 视图下方的时间轴工具栏中，可在此处或工具栏内调整。</div>
               </div>
-            </div>
-            <div class="card-control">
-              <input type="number" id="timeline-duration-input" class="win11-input" style="width: 80px;" value="8.0" min="1" max="60" step="0.5">
-            </div>
-          </div>
-
-          <div class="win11-card">
-            <div class="card-info">
-              <div class="card-icon">🔁</div>
-              <div class="card-text">
-                <div class="card-title">循环往复播放</div>
-                <div class="card-desc">播放至终点后自动回到起始位置</div>
-              </div>
-            </div>
-            <div class="card-control">
-              <label class="win11-toggle">
-                <input type="checkbox" id="timeline-loop-toggle" checked>
-                <span class="toggle-slider"></span>
-              </label>
             </div>
           </div>
 
@@ -856,6 +840,22 @@
             </div>
           </div>
 
+          <div class="section-group-title">工作区布局</div>
+
+          <div class="win11-card">
+            <div class="card-info">
+              <div class="card-icon">🗔</div>
+              <div class="card-text">
+                <div class="card-title">保存与恢复工作区排版</div>
+                <div class="card-desc">记住侧边栏宽度、设置面板宽度、时间轴高度与摄像机面板状态，下次启动自动恢复</div>
+              </div>
+            </div>
+            <div class="card-control">
+              <button id="save-layout-btn" class="win11-btn sm primary">保存当前布局</button>
+              <button id="reset-layout-btn" class="win11-btn sm">重置默认</button>
+            </div>
+          </div>
+
           <div class="section-group-title">系统环境检测</div>
 
           <div class="win11-card">
@@ -875,52 +875,114 @@
 
       </section>
 
+      <!-- Resizable splitter between settings pane and 3D viewport -->
+      <div class="splitter splitter-v" id="content-splitter" title="拖动调整设置面板宽度"></div>
+
       <!-- Right 3D Viewport Pane -->
       <section class="viewport-pane">
 
-        <div id="viewport-canvas-container">
-          <!-- Canvas injected here by Three.js -->
+        <!-- 3D canvas area (flexible) -->
+        <div class="viewport-canvas-wrap">
+          <div id="viewport-canvas-container">
+            <!-- Canvas injected here by Three.js -->
+          </div>
+
+          <!-- Top Floating HUD -->
+          <div class="viewport-hud-top">
+            <div class="viewport-formula-badge">
+              <span style="color: var(--win-accent); font-weight: 600;">当前函数:</span>
+              <div id="hud-formula-render" class="formula-render"></div>
+            </div>
+
+            <div class="viewport-tools-group">
+              <button id="view-iso-btn" class="hud-btn active" title="重置为三维等轴透视视角">3D</button>
+              <button id="view-top-btn" class="hud-btn" title="顶视图 (XY 投影)">俯视</button>
+              <button id="view-front-btn" class="hud-btn" title="前视图 (XZ 投影)">正视</button>
+              <button id="hud-wireframe-btn" class="hud-btn" title="线框网格切换">▦</button>
+              <button id="camera-panel-toggle-btn" class="hud-btn" title="摄像机控制">📷</button>
+            </div>
+          </div>
+
+          <!-- Stats Pill -->
+          <div class="stats-badge" id="hud-stats-badge">60 FPS | WebGL2</div>
+
+          <!-- Camera control panel (floating) -->
+          <div class="camera-panel" id="camera-panel" style="display: none;">
+            <div class="camera-panel-header">
+              <span>摄像机控制</span>
+              <button id="camera-panel-close-btn" class="camera-close" title="关闭">✕</button>
+            </div>
+            <div class="camera-grid">
+              <div class="camera-row"><span class="camera-label">位置 X</span><input type="number" id="cam-pos-x" class="win11-input" step="0.5"></div>
+              <div class="camera-row"><span class="camera-label">位置 Y</span><input type="number" id="cam-pos-y" class="win11-input" step="0.5"></div>
+              <div class="camera-row"><span class="camera-label">位置 Z</span><input type="number" id="cam-pos-z" class="win11-input" step="0.5"></div>
+              <div class="camera-row"><span class="camera-label">目标 X</span><input type="number" id="cam-target-x" class="win11-input" step="0.5"></div>
+              <div class="camera-row"><span class="camera-label">目标 Y</span><input type="number" id="cam-target-y" class="win11-input" step="0.5"></div>
+              <div class="camera-row"><span class="camera-label">目标 Z</span><input type="number" id="cam-target-z" class="win11-input" step="0.5"></div>
+              <div class="camera-row">
+                <span class="camera-label">视场角</span>
+                <input type="range" id="cam-fov" class="win11-range" min="5" max="120" step="1" value="45">
+                <span id="cam-fov-val" class="slider-val">45°</span>
+              </div>
+              <div class="camera-row">
+                <span class="camera-label">投影</span>
+                <select id="cam-projection" class="win11-select">
+                  <option value="perspective" selected>透视</option>
+                  <option value="orthographic">正交</option>
+                </select>
+              </div>
+            </div>
+            <div class="camera-view-buttons">
+              <button class="win11-btn sm cam-view-btn" data-view="iso">等轴</button>
+              <button class="win11-btn sm cam-view-btn" data-view="top">顶</button>
+              <button class="win11-btn sm cam-view-btn" data-view="bottom">底</button>
+              <button class="win11-btn sm cam-view-btn" data-view="front">前</button>
+              <button class="win11-btn sm cam-view-btn" data-view="back">后</button>
+              <button class="win11-btn sm cam-view-btn" data-view="left">左</button>
+              <button class="win11-btn sm cam-view-btn" data-view="right">右</button>
+              <button class="win11-btn sm" id="cam-frame-all-btn">适配</button>
+            </div>
+            <label class="camera-autorotate">
+              <input type="checkbox" id="cam-autorotate"> 自动环绕
+            </label>
+          </div>
         </div>
 
-        <!-- Top Floating HUD -->
-        <div class="viewport-hud-top">
-          <div class="viewport-formula-badge">
-            <span style="color: var(--win-accent); font-weight: 600;">当前函数:</span>
-            <div id="hud-formula-render" class="formula-render"></div>
-          </div>
+        <!-- Resizable splitter between canvas and timeline -->
+        <div class="splitter splitter-h" id="timeline-splitter" title="拖动调整时间轴高度"></div>
 
-          <div class="viewport-tools-group">
-            <button id="view-iso-btn" class="hud-btn active" title="重置为三维等轴透视视角">3D</button>
-            <button id="view-top-btn" class="hud-btn" title="顶视图 (XY 投影)">俯视</button>
-            <button id="view-front-btn" class="hud-btn" title="前视图 (XZ 投影)">正视</button>
-            <button id="hud-wireframe-btn" class="hud-btn" title="线框网格切换">•</button>
-          </div>
-        </div>
+        <!-- Keyframe timeline editor panel -->
+        <div class="timeline-panel" id="timeline-panel">
+          <div class="timeline-toolbar">
+            <div class="playback-controls">
+              <button id="time-step-back-btn" class="hud-btn" title="步退 0.2s">⏮</button>
+              <button id="play-pause-btn" class="hud-btn active" title="播放 / 暂停" style="width: 34px; height: 34px; font-size: 15px;">▶</button>
+              <button id="time-step-fwd-btn" class="hud-btn" title="步进 0.2s">⏭</button>
+            </div>
 
-        <!-- Stats Pill -->
-        <div class="stats-badge" id="hud-stats-badge">60 FPS | WebGL2</div>
+            <div class="timeline-scrubber">
+              <span class="time-indicator" id="time-display-label">0.00s / 8.00s</span>
+              <input type="range" id="timeline-scrubber-slider" class="win11-range" min="0" max="8.0" step="0.02" value="0">
+            </div>
 
-        <!-- Bottom Floating Playback & Timeline Bar -->
-        <div class="viewport-timeline">
-          <div class="playback-controls">
-            <button id="time-step-back-btn" class="hud-btn" title="步退 0.2s">⏮</button>
-            <button id="play-pause-btn" class="hud-btn active" title="播放 / 暂停" style="width: 38px; height: 38px; font-size: 16px;">▶</button>
-            <button id="time-step-fwd-btn" class="hud-btn" title="步进 0.2s">⏭</button>
+            <div class="timeline-toolbar-right">
+              <span class="timeline-tool-label">时长</span>
+              <input type="number" id="timeline-duration-input" class="win11-input" style="width: 64px;" value="8.0" min="1" max="60" step="0.5">
+              <label class="win11-toggle" title="循环播放" style="transform: scale(0.82);">
+                <input type="checkbox" id="timeline-loop-toggle" checked>
+                <span class="toggle-slider"></span>
+              </label>
+              <select id="playback-speed-select" class="win11-select" style="padding: 3px 8px; font-size: 11px;">
+                <option value="0.5">0.5x</option>
+                <option value="1.0" selected>1.0x</option>
+                <option value="1.5">1.5x</option>
+                <option value="2.0">2.0x</option>
+              </select>
+              <button id="tl-add-keyframe-btn" class="win11-btn sm primary" title="在当前时间添加关键帧">＋关键帧</button>
+              <button id="tl-delete-keyframe-btn" class="win11-btn sm" title="删除选中关键帧">删关键帧</button>
+            </div>
           </div>
-
-          <div class="timeline-scrubber">
-            <span class="time-indicator" id="time-display-label">0.00s / 8.00s</span>
-            <input type="range" id="timeline-scrubber-slider" class="win11-range" min="0" max="8.0" step="0.02" value="0">
-          </div>
-
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <select id="playback-speed-select" class="win11-select" style="padding: 3px 8px; font-size: 11px;">
-              <option value="0.5">0.5x</option>
-              <option value="1.0" selected>1.0x</option>
-              <option value="1.5">1.5x</option>
-              <option value="2.0">2.0x</option>
-            </select>
-          </div>
+          <div class="timeline-canvas-wrap" id="timeline-canvas-wrap"></div>
         </div>
 
       </section>

@@ -10,6 +10,7 @@ import { ExpressionParser } from './modules/expression_parser.js';
 import { KeyframeEngine } from './modules/keyframe_engine.js';
 import { PresetsManager } from './modules/presets_manager.js';
 import { CodeGenerator } from './modules/code_generator.js';
+import { TimelineEditor } from './modules/timeline_editor.js';
 
 class App {
   constructor() {
@@ -17,6 +18,19 @@ class App {
     this.parser = new ExpressionParser();
     this.keyframes = new KeyframeEngine();
     this.presets = new PresetsManager();
+
+    // Interactive keyframe timeline / curve editor under the 3D viewport.
+    this.timelineEditor = new TimelineEditor('timeline-canvas-wrap', this.keyframes, {
+      onSelect: (param, idx) => this.selectKeyframeForEdit(param, idx),
+      onScrub: (t) => this.keyframes.setTime(t),
+      onKeyframeChanged: (param, idx) => this.onKeyframeEdited(param, idx),
+      onAddKeyframe: (param, time, value) => this.addKeyframeAt(param, time, value),
+      onDeleteKeyframe: () => this.deleteSelectedKeyframe()
+    });
+
+    // Workspace layout state (persisted across sessions).
+    this.layoutDefaults = { sidebar: 290, content: 520, timeline: 240, cameraPanel: false };
+    this.layout = Object.assign({}, this.layoutDefaults);
 
     this.activeType = 'explicit'; // 'explicit' | 'parametric_curve' | 'parametric_surface' | 'vector_field'
     this.activeSetup = {
@@ -45,6 +59,9 @@ class App {
     this.initExportControls();
     this.initPreferencesControls();
     this.initTimelinePlayback();
+    this.initTimelineToolbar();
+    this.initCameraPanel();
+    this.initLayoutManager();
     this.initProjectManagement();
 
     // Initial render
@@ -52,6 +69,7 @@ class App {
     this.renderCurrentFrame(0, this.keyframes.evaluateAll(0));
     this.updateCodeGenerator();
     this.renderTransitionCanvas();
+    this.refreshTimeline();
 
     // Start Keyframe Animation Clock
     let lastTime = performance.now();
@@ -117,7 +135,10 @@ class App {
       home.classList.remove('active');
       studio.classList.add('active');
       // The viewport had zero size while hidden; force a resize once visible.
-      requestAnimationFrame(() => this.viewport.onWindowResize());
+      requestAnimationFrame(() => {
+        this.viewport.onWindowResize();
+        this.refreshTimeline();
+      });
     }
   }
 
@@ -655,6 +676,7 @@ class App {
       const d = parseFloat(e.target.value) || 8.0;
       this.keyframes.duration = d;
       document.getElementById('timeline-scrubber-slider').max = d;
+      this.refreshTimeline();
     });
 
     // Add parameter button
@@ -761,6 +783,7 @@ class App {
           document.getElementById('inner-func-input').value = kf.transition.innerFunc || 'x';
           this.renderTransitionCanvas();
         }
+        if (this.timelineEditor) this.timelineEditor.setSelection(this.selectedParamForEdit, this.selectedKeyframeIdx);
       });
     });
 
@@ -788,6 +811,8 @@ class App {
         }
       });
     });
+
+    this.refreshTimeline();
   }
 
   renderTransitionCanvas() {
@@ -827,6 +852,54 @@ class App {
     ctx.stroke();
 
     document.getElementById('trans-curve-formula-badge').textContent = `h(τ) = ${outerExpr} ∘ (${innerExpr})`;
+  }
+
+  // --------------------------------------------------------------------------
+  // Timeline Editor Helpers (keyframe curve editing under the 3D viewport)
+  // --------------------------------------------------------------------------
+  refreshTimeline() {
+    if (this.timelineEditor) this.timelineEditor.refresh();
+  }
+
+  selectKeyframeForEdit(param, idx) {
+    this.selectedParamForEdit = param;
+    this.selectedKeyframeIdx = idx;
+    const p = this.keyframes.parameters[param];
+    if (p && p.keyframes[idx] && p.keyframes[idx].transition) {
+      document.getElementById('outer-func-input').value = p.keyframes[idx].transition.outerFunc || 'x';
+      document.getElementById('inner-func-input').value = p.keyframes[idx].transition.innerFunc || 'x';
+      this.renderTransitionCanvas();
+    }
+    if (this.timelineEditor) this.timelineEditor.setSelection(param, idx);
+  }
+
+  onKeyframeEdited(param, idx) {
+    // A keyframe was dragged in the timeline: refresh the parameter list and re-render.
+    this.refreshParameterUI();
+    this.renderCurrentFrame(this.keyframes.currentTime, this.keyframes.evaluateAll(this.keyframes.currentTime));
+  }
+
+  addKeyframeAt(param, time, value) {
+    if (!this.keyframes.parameters[param]) return;
+    this.keyframes.addKeyframe(param, time, value);
+    this.selectedParamForEdit = param;
+    this.refreshParameterUI();
+    this.renderCurrentFrame(this.keyframes.currentTime, this.keyframes.evaluateAll(this.keyframes.currentTime));
+  }
+
+  deleteSelectedKeyframe() {
+    const param = this.selectedParamForEdit;
+    const idx = this.selectedKeyframeIdx;
+    const p = this.keyframes.parameters[param];
+    if (param && p && p.keyframes[idx] !== undefined) {
+      this.keyframes.removeKeyframe(param, idx);
+      this.selectedKeyframeIdx = -1;
+      if (this.timelineEditor) this.timelineEditor.setSelection(param, -1);
+      this.refreshParameterUI();
+      this.renderCurrentFrame(this.keyframes.currentTime, this.keyframes.evaluateAll(this.keyframes.currentTime));
+    } else {
+      this.toast('请先在时间轴中选中一个关键帧', 'error');
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -1244,6 +1317,179 @@ class App {
   }
 
   // --------------------------------------------------------------------------
+  // Camera Control System
+  // --------------------------------------------------------------------------
+  initCameraPanel() {
+    const panel = document.getElementById('camera-panel');
+    const toggleBtn = document.getElementById('camera-panel-toggle-btn');
+    const closeBtn = document.getElementById('camera-panel-close-btn');
+
+    toggleBtn.addEventListener('click', () => {
+      const hidden = panel.style.display === 'none';
+      panel.style.display = hidden ? 'block' : 'none';
+      if (hidden) this.syncCameraPanel();
+    });
+    closeBtn.addEventListener('click', () => { panel.style.display = 'none'; });
+
+    ['cam-pos-x', 'cam-pos-y', 'cam-pos-z', 'cam-target-x', 'cam-target-y', 'cam-target-z'].forEach((id) => {
+      document.getElementById(id).addEventListener('change', () => this.applyCameraFromPanel());
+    });
+
+    const fov = document.getElementById('cam-fov');
+    fov.addEventListener('input', () => {
+      document.getElementById('cam-fov-val').textContent = Math.round(parseFloat(fov.value)) + '°';
+      this.viewport.setFov(parseFloat(fov.value));
+    });
+
+    document.getElementById('cam-projection').addEventListener('change', (e) => {
+      this.viewport.setProjection(e.target.value);
+      this.syncCameraPanel();
+    });
+
+    document.querySelectorAll('.cam-view-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.viewport.resetCamera(btn.dataset.view);
+        this.syncCameraPanel();
+      });
+    });
+
+    document.getElementById('cam-frame-all-btn').addEventListener('click', () => {
+      this.viewport.frameAll();
+      this.syncCameraPanel();
+    });
+
+    document.getElementById('cam-autorotate').addEventListener('change', (e) => {
+      this.viewport.setAutoRotate(e.target.checked);
+    });
+
+    // Keep the panel in sync while the user orbits / zooms / pans the camera.
+    if (this.viewport && this.viewport.controls) {
+      let pending = false;
+      this.viewport.controls.addEventListener('change', () => {
+        if (panel.style.display === 'none' || pending) return;
+        pending = true;
+        requestAnimationFrame(() => { pending = false; this.syncCameraPanel(); });
+      });
+    }
+  }
+
+  syncCameraPanel() {
+    const s = this.viewport.getCameraState();
+    const setNum = (id, v) => { const el = document.getElementById(id); if (el) el.value = (+v).toFixed(2); };
+    setNum('cam-pos-x', s.position.x);
+    setNum('cam-pos-y', s.position.y);
+    setNum('cam-pos-z', s.position.z);
+    setNum('cam-target-x', s.target.x);
+    setNum('cam-target-y', s.target.y);
+    setNum('cam-target-z', s.target.z);
+    const fov = document.getElementById('cam-fov');
+    fov.value = s.fov;
+    document.getElementById('cam-fov-val').textContent = Math.round(s.fov) + '°';
+    document.getElementById('cam-projection').value = s.projection;
+    document.getElementById('cam-autorotate').checked = s.autoRotate;
+  }
+
+  applyCameraFromPanel() {
+    const num = (id) => parseFloat(document.getElementById(id).value) || 0;
+    this.viewport.setCameraPosition(num('cam-pos-x'), num('cam-pos-y'), num('cam-pos-z'));
+    this.viewport.setCameraTarget(num('cam-target-x'), num('cam-target-y'), num('cam-target-z'));
+  }
+
+  // --------------------------------------------------------------------------
+  // Workspace Layout (resizable panes + persistence)
+  // --------------------------------------------------------------------------
+  initLayoutManager() {
+    this.initSplitters();
+    document.getElementById('save-layout-btn').addEventListener('click', () => this.saveLayout(true));
+    document.getElementById('reset-layout-btn').addEventListener('click', () => this.resetLayout());
+    this.restoreLayout().then(() => this.applyLayout());
+  }
+
+  initSplitters() {
+    this.makeResizable('sidebar-splitter', 'sidebar', 'x', 200, 460, (v) => { this.layout.sidebar = v; });
+    this.makeResizable('content-splitter', 'settings-scroll-pane', 'x', 360, 780, (v) => { this.layout.content = v; });
+    this.makeResizable('timeline-splitter', 'timeline-panel', 'y', 140, 520, (v) => { this.layout.timeline = v; });
+  }
+
+  makeResizable(splitterId, paneId, axis, min, max, onSet) {
+    const splitter = document.getElementById(splitterId);
+    const pane = document.getElementById(paneId);
+    if (!splitter || !pane) return;
+    splitter.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      splitter.classList.add('dragging');
+      splitter.setPointerCapture(e.pointerId);
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startSize = axis === 'x' ? pane.getBoundingClientRect().width : pane.getBoundingClientRect().height;
+
+      const onMove = (ev) => {
+        let size;
+        if (axis === 'x') {
+          size = startSize + (ev.clientX - startX);
+        } else {
+          size = startSize - (ev.clientY - startY);
+        }
+        size = Math.max(min, Math.min(max, size));
+        if (axis === 'x') pane.style.width = size + 'px';
+        else pane.style.height = size + 'px';
+        onSet(size);
+      };
+
+      const onUp = () => {
+        splitter.classList.remove('dragging');
+        splitter.removeEventListener('pointermove', onMove);
+        splitter.removeEventListener('pointerup', onUp);
+        splitter.removeEventListener('pointercancel', onUp);
+      };
+
+      splitter.addEventListener('pointermove', onMove);
+      splitter.addEventListener('pointerup', onUp);
+      splitter.addEventListener('pointercancel', onUp);
+    });
+  }
+
+  async restoreLayout() {
+    let data = null;
+    if (this.isNative()) {
+      data = await this.nativeCall('load_layout', []);
+    }
+    if (!data || typeof data !== 'object') {
+      try { data = JSON.parse(localStorage.getItem('mathstudio_layout_v1') || 'null'); } catch (e) { data = null; }
+    }
+    if (data && typeof data === 'object') {
+      this.layout = Object.assign({}, this.layoutDefaults, data);
+    }
+  }
+
+  async saveLayout(showToast = false) {
+    const layout = Object.assign({}, this.layout);
+    layout.cameraPanel = document.getElementById('camera-panel').style.display !== 'none';
+    if (this.isNative()) {
+      await this.nativeCall('save_layout', [layout]);
+    }
+    try { localStorage.setItem('mathstudio_layout_v1', JSON.stringify(layout)); } catch (e) {}
+    if (showToast) this.toast('工作区布局已保存', 'success');
+  }
+
+  applyLayout() {
+    const sidebar = document.getElementById('sidebar');
+    const content = document.getElementById('settings-scroll-pane');
+    const timeline = document.getElementById('timeline-panel');
+    if (sidebar) sidebar.style.width = this.layout.sidebar + 'px';
+    if (content) content.style.width = this.layout.content + 'px';
+    if (timeline) timeline.style.height = this.layout.timeline + 'px';
+    const panel = document.getElementById('camera-panel');
+    if (panel) panel.style.display = this.layout.cameraPanel ? 'block' : 'none';
+  }
+
+  resetLayout() {
+    this.layout = Object.assign({}, this.layoutDefaults);
+    this.applyLayout();
+    this.saveLayout(false).then(() => this.toast('已重置为默认布局', 'success'));
+  }
+
+  // --------------------------------------------------------------------------
   // Timeline Playback & Realtime Scrubbing
   // --------------------------------------------------------------------------
   initTimelinePlayback() {
@@ -1270,6 +1516,28 @@ class App {
     document.getElementById('playback-speed-select').addEventListener('change', (e) => {
       this.keyframes.playbackSpeed = parseFloat(e.target.value);
     });
+
+    // Loop toggle (previously unbound — now actually controls looping).
+    document.getElementById('timeline-loop-toggle').addEventListener('change', (e) => {
+      this.keyframes.loop = e.target.checked;
+    });
+  }
+
+  initTimelineToolbar() {
+    document.getElementById('tl-add-keyframe-btn').addEventListener('click', () => {
+      const param = this.selectedParamForEdit;
+      if (!param || !this.keyframes.parameters[param]) {
+        this.toast('请先在时间轴中选中一个参数轨道', 'error');
+        return;
+      }
+      const t = this.keyframes.currentTime;
+      const v = this.keyframes.evaluateParameter(param, t);
+      this.addKeyframeAt(param, t, v);
+    });
+
+    document.getElementById('tl-delete-keyframe-btn').addEventListener('click', () => {
+      this.deleteSelectedKeyframe();
+    });
   }
 
   onTimelineTick(t, scope) {
@@ -1282,6 +1550,7 @@ class App {
       if (el) el.textContent = scope[name].toFixed(2);
     }
 
+    if (this.timelineEditor) this.timelineEditor.setPlayhead(t);
     this.renderCurrentFrame(t, scope);
   }
 
@@ -1316,7 +1585,18 @@ class App {
   }
 }
 
-// Bootstrap on DOM ready
+// Bootstrap on DOM ready. Defer by two animation frames so the browser can paint
+// the shell (home page) first — the WebGL viewport, surface build and code
+// generation then run without blocking the initial paint, avoiding a frozen
+// startup window.
 window.addEventListener('DOMContentLoaded', () => {
-  window.app = new App();
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      try {
+        window.app = new App();
+      } catch (err) {
+        console.error('Failed to initialize application:', err);
+      }
+    });
+  });
 });

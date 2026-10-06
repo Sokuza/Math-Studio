@@ -15,6 +15,24 @@ export class ExpressionParser {
       sigmoid: (x) => 1 / (1 + Math.exp(-x)),
       clamp: (val, min, max) => Math.max(min, Math.min(max, val))
     };
+    // Cache compiled expression nodes so repeated renders (scrubbing / playback)
+    // do not re-parse the same formula on every frame.
+    this._compileCache = new Map();
+  }
+
+  _compile(exprStr) {
+    const cleaned = this.cleanExpression(exprStr);
+    if (this._compileCache.has(cleaned)) {
+      return this._compileCache.get(cleaned);
+    }
+    const compiled = math.compile(cleaned);
+    this._compileCache.set(cleaned, compiled);
+    // Bound the cache size to avoid unbounded growth with many distinct formulas.
+    if (this._compileCache.size > 256) {
+      const firstKey = this._compileCache.keys().next().value;
+      this._compileCache.delete(firstKey);
+    }
+    return compiled;
   }
 
   cleanExpression(expr) {
@@ -27,8 +45,7 @@ export class ExpressionParser {
   // Compile z = f(x, y, t, ...)
   compileExplicit(exprStr) {
     try {
-      const cleaned = this.cleanExpression(exprStr);
-      const compiled = math.compile(cleaned);
+      const compiled = this._compile(exprStr);
       
       return (x, y, customScope = {}) => {
         const scope = Object.assign({}, this.baseScope, customScope, { x, y });
@@ -44,9 +61,9 @@ export class ExpressionParser {
   // Compile 3D Curve (x(u), y(u), z(u))
   compileParametricCurve(xStr, yStr, zStr) {
     try {
-      const codeX = math.compile(this.cleanExpression(xStr));
-      const codeY = math.compile(this.cleanExpression(yStr));
-      const codeZ = math.compile(this.cleanExpression(zStr));
+      const codeX = this._compile(xStr);
+      const codeY = this._compile(yStr);
+      const codeZ = this._compile(zStr);
 
       return (u, customScope = {}) => {
         const scope = Object.assign({}, this.baseScope, customScope, { u, t: customScope.t || 0 });
@@ -68,9 +85,9 @@ export class ExpressionParser {
   // Compile 3D Surface (x(u,v), y(u,v), z(u,v))
   compileParametricSurface(xStr, yStr, zStr) {
     try {
-      const codeX = math.compile(this.cleanExpression(xStr));
-      const codeY = math.compile(this.cleanExpression(yStr));
-      const codeZ = math.compile(this.cleanExpression(zStr));
+      const codeX = this._compile(xStr);
+      const codeY = this._compile(yStr);
+      const codeZ = this._compile(zStr);
 
       return (u, v, customScope = {}) => {
         const scope = Object.assign({}, this.baseScope, customScope, { u, v, t: customScope.t || 0 });
@@ -92,9 +109,9 @@ export class ExpressionParser {
   // Compile 3D Vector Field F(x,y,z) = (u, v, w)
   compileVectorField(uStr, vStr, wStr) {
     try {
-      const codeU = math.compile(this.cleanExpression(uStr));
-      const codeV = math.compile(this.cleanExpression(vStr));
-      const codeW = math.compile(this.cleanExpression(wStr));
+      const codeU = this._compile(uStr);
+      const codeV = this._compile(vStr);
+      const codeW = this._compile(wStr);
 
       return (x, y, z, customScope = {}) => {
         const scope = Object.assign({}, this.baseScope, customScope, { x, y, z, t: customScope.t || 0 });

@@ -6,6 +6,12 @@
 
 ---
 
+## 📸 截图
+
+![Math Studio 界面截图](docs/screenshot.png)
+
+---
+
 ## ✨ 核心功能
 
 - **项目资源窗口（首页）**：新建项目、打开已保存项目、最近项目列表；项目以 JSON 文件持久化。
@@ -27,15 +33,18 @@
 ```
 Math Studio/
 ├── app.py                 # 主入口（PyWebView + Edge WebView2 + 原生 API）
+├── loading.html           # 启动加载动画页（视频 + 进度条）
 ├── calculus_engine.py     # SymPy 符号计算引擎
 ├── video_exporter.py      # FFmpeg 逐帧编码视频管线
 ├── build_frontend.js      # esbuild 前端打包脚本（src -> web_dist）
 ├── build_exe.py           # PyInstaller 打包脚本（生成 Math Studio.exe）
 ├── generate_icon.py       # 应用图标生成
+├── assets/                # 启动动画等运行时资源
+├── docs/                  # 文档截图
 ├── src/
 │   ├── index.html         # 双页面 UI（项目资源窗口 + 数学工作台）
 │   ├── main.js            # 应用编排器
-│   ├── modules/           # 3D 视口 / 表达式解析 / 关键帧 / 预设 / 代码生成
+│   ├── modules/           # 3D 视口 / 表达式解析 / 关键帧 / 时间轴 / 预设 / 代码生成
 │   └── styles/            # Windows 11 Fluent 样式
 ├── package.json
 └── 使用说明.md             # 详细功能说明（中文）

@@ -9,6 +9,14 @@ import sys
 import shutil
 import subprocess
 
+# Make the build log robust against non-ASCII output on GBK Windows consoles
+# (e.g. the "✓" printed by the esbuild frontend step).
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 def build():
     # 0. Clean previous binaries
     for old_exe in ["数学函数表达式工具.exe", "Math Studio.exe"]:
@@ -25,7 +33,13 @@ def build():
         subprocess.run([sys.executable, "generate_icon.py"])
 
     print("=== Step 1: Rebuilding frontend assets ===")
-    res = subprocess.run(["node", "build_frontend.js"], capture_output=True, text=True)
+    res = subprocess.run(
+        ["node", "build_frontend.js"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
     print(res.stdout)
     if res.returncode != 0:
         print("Frontend build failed:", res.stderr)
@@ -43,6 +57,8 @@ def build():
         "--add-data=web_dist;web_dist",
         "--add-data=app_icon.ico;.",
         "--add-data=app_icon.png;.",
+        "--add-data=loading.html;.",
+        "--add-data=assets;assets",
         "--collect-all=webview",
         "--collect-all=clr_loader",
         "--collect-all=pythonnet",
