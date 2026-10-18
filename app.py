@@ -10,10 +10,7 @@ import time
 import base64
 import subprocess
 import threading
-import ctypes
 import webview
-from calculus_engine import CalculusEngine
-from video_exporter import VideoExporter
 
 def get_asset_path(relative_path: str) -> str:
     """Get absolute path to resource, works for dev and for PyInstaller."""
@@ -23,58 +20,31 @@ def get_asset_path(relative_path: str) -> str:
         base_path = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_path, relative_path)
 
-def get_primary_screen_size():
-    """Return (width, height) of the primary screen in logical pixels."""
-    try:
-        user32 = ctypes.windll.user32
-        return int(user32.GetSystemMetrics(0)), int(user32.GetSystemMetrics(1))
-    except Exception:
-        return 2560, 1600
-
 class NativeMathApi:
     def __init__(self):
-        self.calculus = CalculusEngine()
-        self.exporter = VideoExporter()
+        self._calculus = None
+        self._exporter = None
         self.presets_file = os.path.join(os.path.expanduser("~"), ".math_function_presets.json")
         self.projects_dir = os.path.join(os.path.expanduser("~"), "MathStudio", "Projects")
         self.layout_file = os.path.join(os.path.expanduser("~"), ".math_studio_layout.json")
         self._window = None
-        self._loading_window = None
-        self._loading_finished = False
-        self._loading_lock = threading.Lock()
+
+    @property
+    def calculus(self):
+        if self._calculus is None:
+            from calculus_engine import CalculusEngine
+            self._calculus = CalculusEngine()
+        return self._calculus
+
+    @property
+    def exporter(self):
+        if self._exporter is None:
+            from video_exporter import VideoExporter
+            self._exporter = VideoExporter()
+        return self._exporter
 
     def set_window(self, win):
         self._window = win
-
-    def set_loading_window(self, win):
-        self._loading_window = win
-
-    def finish_loading(self):
-        """Reveal the main window and close the splash (idempotent).
-
-        Called both from the splash page's JS bridge and from a Python watchdog
-        thread, so the splash always terminates even if the JS bridge fails.
-        """
-        with self._loading_lock:
-            if self._loading_finished:
-                return
-            self._loading_finished = True
-
-        print("[loading] finish_loading called", flush=True)
-        try:
-            if self._window:
-                print("[loading] showing main window", flush=True)
-                self._window.show()
-                print("[loading] main window shown", flush=True)
-        except Exception as e:
-            print("[loading] show error:", e, flush=True)
-        try:
-            if self._loading_window:
-                print("[loading] destroying splash", flush=True)
-                self._loading_window.destroy()
-                print("[loading] splash destroyed", flush=True)
-        except Exception as e:
-            print("[loading] destroy error:", e, flush=True)
 
     # --- Workspace Layout Persistence ---
     def load_layout(self):
@@ -277,25 +247,85 @@ class NativeMathApi:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-class LoadingBridge:
-    """Minimal JS bridge exposed only to the splash window.
+    # --- Native Window Controls ---
+    def toggle_fullscreen(self):
+        if not self._window:
+            return False
+        try:
+            self._window.toggle_fullscreen()
+            return bool(getattr(self._window, 'fullscreen', False))
+        except Exception as e:
+            print("toggle_fullscreen error:", e)
+            return False
 
-    Keeps NO references to Window objects as public attributes, so pywebview's
-    JS-API introspection never recurses into native WinForms/WebView2 controls
-    (which previously produced a flood of "recursion depth / UI thread" errors
-    and left the splash unable to signal completion).
-    """
+    def is_fullscreen(self):
+        if not self._window:
+            return False
+        return bool(getattr(self._window, 'fullscreen', False))
 
-    def __init__(self, finish_callback):
-        self._finish_callback = finish_callback
+    def minimize_window(self):
+        if self._window:
+            try:
+                self._window.minimize()
+                return True
+            except Exception as e:
+                print("minimize_window error:", e)
+        return False
 
-    def finish_loading(self):
-        self._finish_callback()
+    def maximize_window(self):
+        if self._window:
+            try:
+                self._window.maximize()
+                return True
+            except Exception as e:
+                print("maximize_window error:", e)
+        return False
 
+    def restore_window(self):
+        if self._window:
+            try:
+                self._window.restore()
+                return True
+            except Exception as e:
+                print("restore_window error:", e)
+        return False
+
+    def reset_window_size(self, width: int = 1380, height: int = 880):
+        if self._window:
+            try:
+                if getattr(self._window, 'fullscreen', False):
+                    self._window.toggle_fullscreen()
+                self._window.restore()
+                self._window.resize(width, height)
+                return True
+            except Exception as e:
+                print("reset_window_size error:", e)
+        return False
+
+    def close_window(self):
+        if self._window:
+            try:
+                self._window.destroy()
+                return True
+            except Exception as e:
+                print("close_window error:", e)
+        return False
+
+    def get_system_info(self):
+        import platform
+        return {
+            "os": f"{platform.system()} {platform.release()} ({platform.version()})",
+            "python": platform.python_version(),
+            "machine": platform.machine(),
+            "processor": platform.processor(),
+            "ffmpeg": self.exporter.ffmpeg_path,
+            "presets_path": self.presets_file,
+            "projects_dir": self.projects_dir
+        }
 
 def main():
     api = NativeMathApi()
-
+    
     # Path to frontend html
     html_path = get_asset_path(os.path.join("web_dist", "index.html"))
     if not os.path.exists(html_path):
@@ -304,16 +334,7 @@ def main():
         if not os.path.exists(html_path):
             html_path = get_asset_path(os.path.join("src", "index.html"))
 
-    # Path to the splash / loading screen (video + progress bar).
-    loading_html_path = get_asset_path("loading.html")
-    if not os.path.exists(loading_html_path):
-        loading_html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "loading.html")
-
-    # Main application window is created FIRST so it is pywebview's "master"
-    # window (the app exits when it closes). It is created hidden and fully
-    # loads in the background while the splash screen plays, so the user never
-    # sees the not-yet-ready main window.
-    main_window = webview.create_window(
+    window = webview.create_window(
         title="Math Studio - Windows 11 Fluent Edition",
         url=f"file://{os.path.normpath(html_path)}",
         js_api=api,
@@ -323,49 +344,21 @@ def main():
         background_color='#1f1f1f',
         text_select=True,
         zoomable=True,
-        hidden=True
+        fullscreen=True  # 启动后为全屏模式
     )
-    api.set_window(main_window)
+    api.set_window(window)
+    
+    # Background pre-warm daemon thread: warm up sympy and ffmpeg quietly after window is shown
+    def _prewarm_background():
+        time.sleep(1.5)
+        try:
+            _ = api.calculus
+        except Exception:
+            pass
 
-    # Splash / loading window (child) — shown immediately, frameless and centered.
-    # It is sized to 1/8 of the screen AREA while keeping the 4:3 layout
-    # (16:9 video on top + black progress strip below).
-    screen_w, screen_h = get_primary_screen_size()
-    area = (screen_w * screen_h) / 8.0
-    loading_h = max(240, int((area * 3.0 / 4.0) ** 0.5))
-    loading_w = max(320, int(loading_h * 4.0 / 3.0))
-    loading_x = (screen_w - loading_w) // 2
-    loading_y = (screen_h - loading_h) // 2
-    print(
-        f"[loading] screen={screen_w}x{screen_h} splash={loading_w}x{loading_h} "
-        f"pos=({loading_x},{loading_y})",
-        flush=True,
-    )
+    threading.Thread(target=_prewarm_background, daemon=True).start()
 
-    loading_window = webview.create_window(
-        title="Math Studio",
-        url=f"file://{os.path.normpath(loading_html_path)}",
-        js_api=LoadingBridge(api.finish_loading),
-        width=loading_w,
-        height=loading_h,
-        x=loading_x,
-        y=loading_y,
-        resizable=False,
-        frameless=True,
-        on_top=True,
-        background_color='#000000'
-    )
-    api.set_loading_window(loading_window)
-
-    # Python watchdog: if the splash page's JS bridge never fires (for any
-    # reason), force-complete the hand-off after a short grace period so the
-    # app can never be left stuck on the loading animation.
-    def watchdog():
-        time.sleep(6.5)
-        api.finish_loading()
-
-    webview.start(func=watchdog, debug=False, gui='edgechromium')
-
+    webview.start(debug=False, gui='edgechromium')
 
 if __name__ == "__main__":
     main()

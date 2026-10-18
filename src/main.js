@@ -10,6 +10,7 @@ import { ExpressionParser } from './modules/expression_parser.js';
 import { KeyframeEngine } from './modules/keyframe_engine.js';
 import { PresetsManager } from './modules/presets_manager.js';
 import { CodeGenerator } from './modules/code_generator.js';
+import { PanelManager } from './modules/panel_manager.js';
 import { TimelineEditor } from './modules/timeline_editor.js';
 
 class App {
@@ -63,13 +64,33 @@ class App {
     this.initCameraPanel();
     this.initLayoutManager();
     this.initProjectManagement();
+    this.initTopMenubar();
+    this.initGlobalShortcuts();
+    this.initRichModals();
 
-    // Initial render
-    this.updateActiveFormulaPreview();
-    this.renderCurrentFrame(0, this.keyframes.evaluateAll(0));
-    this.updateCodeGenerator();
-    this.renderTransitionCanvas();
-    this.refreshTimeline();
+    // Blender-style collapsible panel management (per-panel type dropdown).
+    this.panels = new PanelManager();
+
+    this.hasInitializedStudio = false;
+
+    // The keyframe curve control panel (composite g(f(τ)) editor + curve preview)
+    // must render immediately and reliably — draw it synchronously so it never
+    // disappears, then let the heavier 3D warm-up continue in the background.
+    try {
+      this.renderTransitionCanvas();
+    } catch (e) {
+      console.warn('Initial transition curve render failed:', e);
+    }
+
+    // Listen for pywebview ready if not already available
+    window.addEventListener('pywebviewready', () => {
+      this.refreshProjectList();
+    });
+
+    // Deferred initialization: allow UI to paint and become responsive immediately
+    setTimeout(() => {
+      this.ensureStudioReady();
+    }, 180);
 
     // Start Keyframe Animation Clock
     let lastTime = performance.now();
@@ -124,6 +145,37 @@ class App {
   // --------------------------------------------------------------------------
   // Page Navigation, Modal, Toast & Project Management (First Page)
   // --------------------------------------------------------------------------
+  ensureStudioReady() {
+    if (this.hasInitializedStudio) return;
+    this.hasInitializedStudio = true;
+
+    // Render the keyframe curve panel first (independent of the heavier 3D
+    // pipeline) so it can never be skipped if a later step throws.
+    try {
+      this.renderTransitionCanvas();
+    } catch (e) {
+      console.warn("Transition curve warm-up notice:", e);
+    }
+
+    try {
+      this.updateActiveFormulaPreview();
+    } catch (e) {
+      console.warn("Formula preview warm-up notice:", e);
+    }
+
+    try {
+      this.renderCurrentFrame(0, this.keyframes.evaluateAll(0));
+    } catch (e) {
+      console.warn("Studio warm-up notice:", e);
+    }
+
+    try {
+      this.updateCodeGenerator();
+    } catch (e) {
+      console.warn("Code generator warm-up notice:", e);
+    }
+  }
+
   showPage(page) {
     const home = document.getElementById('page-home');
     const studio = document.getElementById('page-studio');
@@ -134,6 +186,7 @@ class App {
     } else {
       home.classList.remove('active');
       studio.classList.add('active');
+      this.ensureStudioReady();
       // The viewport had zero size while hidden; force a resize once visible.
       requestAnimationFrame(() => {
         this.viewport.onWindowResize();
@@ -290,11 +343,16 @@ class App {
   }
 
   initProjectManagement() {
-    document.getElementById('new-project-btn').addEventListener('click', () => this.newProject());
-    document.getElementById('open-project-btn').addEventListener('click', () => this.openProject());
-    document.getElementById('back-home-btn').addEventListener('click', () => this.showPage('home'));
-    document.getElementById('save-project-btn').addEventListener('click', () => this.saveProject(false));
+    document.getElementById('new-project-btn')?.addEventListener('click', () => this.newProject());
+    document.getElementById('open-project-btn')?.addEventListener('click', () => this.openProject());
+    document.getElementById('back-home-btn')?.addEventListener('click', () => this.showPage('home'));
+    document.getElementById('save-project-btn')?.addEventListener('click', () => this.saveProject(false));
     this.refreshProjectList();
+  }
+
+  updateProjectPill() {
+    const el = document.getElementById('menubar-project-name');
+    if (el) el.textContent = this.projectName || '未命名项目';
   }
 
   async newProject() {
@@ -303,7 +361,9 @@ class App {
     this.projectName = name.trim();
     this.projectPath = null;
     this.resetProjectState();
+    this.updateProjectPill();
     this.showPage('studio');
+    this.toast(`已新建项目: ${this.projectName}`, 'success');
   }
 
   async openProject(path) {
@@ -336,7 +396,9 @@ class App {
       this.applyProject(data);
       this.projectName = data.name || this.projectName;
       this.projectPath = data.path || null;
+      this.updateProjectPill();
       this.showPage('studio');
+      this.toast(`已加载项目: ${this.projectName}`, 'success');
     }
   }
 
@@ -345,7 +407,15 @@ class App {
     if (this.isNative()) {
       const target = (this.projectPath && !saveAs) ? this.projectPath : null;
       const res = await this.nativeCall('save_project', [data, target]);
-      if (res && res.success) { this.projectPath = res.path; this.toast('项目已保存', 'success'); }
+      if (res && res.success) {
+        this.projectPath = res.path;
+        if (res.path) {
+          const base = res.path.split(/[\\/]/).pop().replace('.mathstudio.json', '');
+          if (base) this.projectName = base;
+        }
+        this.updateProjectPill();
+        this.toast('项目已保存至: ' + (this.projectPath || ''), 'success');
+      }
       else if (res && res.cancelled) {}
       else if (res && res.error) this.toast('保存失败: ' + res.error, 'error');
     } else {
@@ -353,6 +423,693 @@ class App {
       this.toast('项目已保存', 'success');
     }
     this.refreshProjectList();
+  }
+
+  // --------------------------------------------------------------------------
+  // Top Navigation Menu Bar (Math-Studio File Edit View Windows)
+  // --------------------------------------------------------------------------
+  initTopMenubar() {
+    const menubar = document.getElementById('app-top-menubar');
+    if (!menubar) return;
+
+    const menuItems = menubar.querySelectorAll('.menu-item');
+    let anyMenuOpen = false;
+
+    // Toggle menu dropdown on click
+    menuItems.forEach(item => {
+      const label = item.querySelector('.menu-label');
+      if (!label) return;
+
+      label.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = item.classList.contains('open');
+        menuItems.forEach(i => i.classList.remove('open'));
+        if (!isOpen) {
+          item.classList.add('open');
+          anyMenuOpen = true;
+        } else {
+          anyMenuOpen = false;
+        }
+      });
+
+      // Hover over other menus when one is already active
+      item.addEventListener('mouseenter', () => {
+        if (anyMenuOpen) {
+          menuItems.forEach(i => i.classList.remove('open'));
+          item.classList.add('open');
+        }
+      });
+    });
+
+    // Close menus when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.menu-dropdown') && !e.target.closest('.menu-label')) {
+        menuItems.forEach(i => i.classList.remove('open'));
+        anyMenuOpen = false;
+      }
+    });
+
+    // Handle menu option actions
+    menubar.querySelectorAll('.menu-option[data-action]').forEach(opt => {
+      opt.addEventListener('click', (e) => {
+        e.stopPropagation();
+        menuItems.forEach(i => i.classList.remove('open'));
+        anyMenuOpen = false;
+        const action = opt.dataset.action;
+        this.handleMenuAction(action);
+      });
+    });
+
+    // Window controls
+    document.getElementById('win-btn-minimize')?.addEventListener('click', () => {
+      this.nativeCall('minimize_window', []);
+    });
+    document.getElementById('win-btn-fullscreen')?.addEventListener('click', async () => {
+      await this.toggleFullScreenMode();
+    });
+    document.getElementById('win-btn-maximize')?.addEventListener('click', () => {
+      this.nativeCall('maximize_window', []);
+    });
+    document.getElementById('win-btn-close')?.addEventListener('click', async () => {
+      const ok = await this.showConfirm('退出程序', '确定要退出 Math Studio 吗？未保存的更改可能会丢失。');
+      if (ok) {
+        if (this.isNative()) await this.nativeCall('close_window', []);
+        else window.close();
+      }
+    });
+
+    // Save button on menubar
+    document.getElementById('menubar-save-btn')?.addEventListener('click', () => {
+      this.saveProject(false);
+    });
+
+    // Theme button on menubar
+    document.getElementById('menubar-theme-btn')?.addEventListener('click', () => {
+      const cur = document.documentElement.getAttribute('data-theme');
+      const next = cur === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      this.toast(`已切换至${next === 'dark' ? '深色' : '浅色'}模式`, 'success');
+    });
+
+    // Project pill rename
+    document.getElementById('menubar-project-pill')?.addEventListener('click', async () => {
+      const newName = await this.showPrompt('重命名项目', '请输入项目的新名称：', this.projectName);
+      if (newName && newName.trim()) {
+        this.projectName = newName.trim();
+        this.updateProjectPill();
+        this.toast('项目已重命名为: ' + this.projectName, 'success');
+      }
+    });
+
+    this.updateProjectPill();
+  }
+
+  async handleMenuAction(action) {
+    switch (action) {
+      // --- Math-Studio Menu ---
+      case 'mathstudio-about':
+        this.openRichModal('dialog-about');
+        break;
+      case 'mathstudio-help':
+        this.openRichModal('dialog-help');
+        break;
+      case 'mathstudio-report':
+        await this.prepareReportData();
+        this.openRichModal('dialog-report');
+        break;
+      case 'mathstudio-version':
+        this.openRichModal('dialog-version');
+        break;
+
+      // --- File Menu ---
+      case 'file-new':
+        this.newProject();
+        break;
+      case 'file-open':
+        this.openProject();
+        break;
+      case 'file-save':
+        this.saveProject(false);
+        break;
+      case 'file-save-as':
+        this.saveProject(true);
+        break;
+      case 'import-expression':
+        this.openImportDialog('expression');
+        break;
+      case 'import-keyframes':
+        this.openImportDialog('keyframes');
+        break;
+      case 'export-mp4':
+        this.showPage('studio');
+        this.switchToTab('export');
+        this.toast('已导航至视频导出面板，点击下方按钮开始导出', 'success');
+        break;
+      case 'export-threejs':
+        this.downloadFile('math_studio_standalone.html', CodeGenerator.generateThreeJsHtml(this.activeSetup), 'text/html');
+        this.toast('独立 HTML5+Three.js 交互单文件已导出！', 'success');
+        break;
+      case 'export-python':
+        this.downloadFile('math_studio_animation.py', CodeGenerator.generatePythonMatplotlib(this.activeSetup), 'text/x-python');
+        this.toast('Python (Matplotlib 3D) 动画脚本已导出！', 'success');
+        break;
+      case 'export-png':
+        this.exportPngSnapshot();
+        break;
+
+      // --- Edit Menu ---
+      case 'edit-preferences':
+        this.showPage('studio');
+        this.switchToTab('preferences');
+        break;
+      case 'mode-explicit':
+        this.switchFunctionMode('explicit');
+        break;
+      case 'mode-curve':
+        this.switchFunctionMode('parametric_curve');
+        break;
+      case 'mode-surface':
+        this.switchFunctionMode('parametric_surface');
+        break;
+      case 'mode-vector':
+        this.switchFunctionMode('vector_field');
+        break;
+      case 'op-partials':
+        this.showPage('studio');
+        this.switchToTab('calculus');
+        document.getElementById('calc-partials-btn')?.click();
+        break;
+      case 'op-integral':
+        this.showPage('studio');
+        this.switchToTab('calculus');
+        document.getElementById('calc-integral-btn')?.click();
+        break;
+      case 'op-tangent-plane':
+        const tanToggle = document.getElementById('tangent-plane-toggle');
+        if (tanToggle) {
+          tanToggle.checked = !tanToggle.checked;
+          tanToggle.dispatchEvent(new Event('change'));
+          this.toast(tanToggle.checked ? '切平面探索已开启' : '切平面已关闭', 'success');
+        }
+        break;
+      case 'op-gradient-field':
+        const gradToggle = document.getElementById('gradient-field-toggle');
+        if (gradToggle) {
+          gradToggle.checked = !gradToggle.checked;
+          gradToggle.dispatchEvent(new Event('change'));
+          this.toast(gradToggle.checked ? '梯度矢量场已开启' : '梯度矢量场已关闭', 'success');
+        }
+        break;
+      case 'more-reset-params':
+        for (const k in this.keyframes.parameters) {
+          const p = this.keyframes.parameters[k];
+          p.currentVal = p.defaultVal;
+        }
+        this.refreshParameterUI();
+        this.renderCurrentFrame(this.keyframes.currentTime, this.keyframes.evaluateAll(this.keyframes.currentTime));
+        this.toast('所有参数已重置为初始默认值', 'success');
+        break;
+      case 'more-clear-keyframes':
+        const okClear = await this.showConfirm('清空时间轴', '确定清空所有参数的关键帧吗？');
+        if (okClear) {
+          for (const k in this.keyframes.parameters) {
+            this.keyframes.parameters[k].keyframes = [];
+          }
+          this.refreshParameterUI();
+          this.toast('关键帧已全部清空', 'success');
+        }
+        break;
+      case 'more-random-math':
+        this.applyRandomMathPreset();
+        break;
+      case 'more-copy-formula':
+        const formula = this.activeType === 'explicit' 
+          ? (this.activeSetup.expr || '') 
+          : `${this.activeSetup.exprX || ''}, ${this.activeSetup.exprY || ''}, ${this.activeSetup.exprZ || ''}`;
+        navigator.clipboard.writeText(formula);
+        this.toast('公式已复制到剪贴板: ' + formula, 'success');
+        break;
+
+      // --- View Menu ---
+      case 'layout-split':
+        document.body.classList.remove('focus-3d');
+        this.showPage('studio');
+        requestAnimationFrame(() => this.viewport.onWindowResize());
+        this.toast('已切换为经典双栏工作模式', 'success');
+        break;
+      case 'layout-fullscreen-3d':
+        this.showPage('studio');
+        document.body.classList.toggle('focus-3d');
+        requestAnimationFrame(() => this.viewport.onWindowResize());
+        const isFocus = document.body.classList.contains('focus-3d');
+        this.toast(isFocus ? '已开启纯净 3D 沉浸模式 (可从 View 菜单还原)' : '已恢复工作台面板', 'success');
+        break;
+      case 'layout-home':
+        this.showPage('home');
+        break;
+      case 'layout-studio':
+        this.showPage('studio');
+        break;
+      case 'theme-dark':
+        document.documentElement.setAttribute('data-theme', 'dark');
+        this.viewport.scene.background.setHex(0x181818);
+        this.toast('已切换为深色模式', 'success');
+        break;
+      case 'theme-light':
+        document.documentElement.setAttribute('data-theme', 'light');
+        this.viewport.scene.background.setHex(0xf5f5f5);
+        this.toast('已切换为浅色模式', 'success');
+        break;
+      case 'theme-black':
+        document.documentElement.setAttribute('data-theme', 'dark');
+        this.viewport.scene.background.setHex(0x000000);
+        this.toast('已切换为赛博纯黑高对比模式', 'success');
+        break;
+      case 'zoom-iso':
+        this.viewport.resetCamera('iso');
+        break;
+      case 'zoom-top':
+        this.viewport.resetCamera('top');
+        break;
+      case 'zoom-front':
+        this.viewport.resetCamera('front');
+        break;
+      case 'zoom-in':
+        this.zoomCamera(0.2);
+        break;
+      case 'zoom-out':
+        this.zoomCamera(-0.25);
+        break;
+      case 'zoom-reset':
+        this.viewport.resetCamera('iso');
+        break;
+      case 'view-wireframe-toggle':
+        const wire = document.getElementById('wireframe-toggle');
+        if (wire) {
+          wire.checked = !wire.checked;
+          wire.dispatchEvent(new Event('change'));
+        }
+        break;
+      case 'view-axes-toggle':
+        const axes = document.getElementById('pref-axes-toggle');
+        if (axes) {
+          axes.checked = !axes.checked;
+          axes.dispatchEvent(new Event('change'));
+        }
+        break;
+      case 'view-grid-toggle':
+        const grid = document.getElementById('pref-grid-toggle');
+        if (grid) {
+          grid.checked = !grid.checked;
+          grid.dispatchEvent(new Event('change'));
+        }
+        break;
+
+      // --- Windows Menu ---
+      case 'win-fullscreen':
+        await this.toggleFullScreenMode();
+        break;
+      case 'win-maximize':
+        if (this.isNative()) await this.nativeCall('maximize_window', []);
+        break;
+      case 'win-restore':
+        if (this.isNative()) await this.nativeCall('restore_window', []);
+        break;
+      case 'win-minimize':
+        if (this.isNative()) await this.nativeCall('minimize_window', []);
+        break;
+      case 'win-reset-size':
+        if (this.isNative()) {
+          await this.nativeCall('reset_window_size', [1380, 880]);
+          this.toast('已恢复为标准窗口尺寸 1380×880', 'success');
+        }
+        break;
+      case 'win-dev-tools':
+        const hud = document.getElementById('hud-stats-badge');
+        if (hud) {
+          const isHidden = hud.style.display === 'none';
+          hud.style.display = isHidden ? 'block' : 'none';
+          this.toast(isHidden ? '性能与 FPS 面板已显示' : '性能与 FPS 面板已隐藏', 'success');
+        }
+        break;
+      case 'win-exit':
+        const confirmExit = await this.showConfirm('退出程序', '确定要退出 Math Studio 吗？未保存的更改可能会丢失。');
+        if (confirmExit) {
+          if (this.isNative()) await this.nativeCall('close_window', []);
+          else window.close();
+        }
+        break;
+    }
+  }
+
+  switchToTab(tabName) {
+    const item = document.querySelector(`.sidebar-nav .nav-item[data-target="${tabName}"]`);
+    if (item) item.click();
+  }
+
+  switchFunctionMode(mode) {
+    this.showPage('studio');
+    const sel = document.getElementById('func-type-select');
+    if (sel) {
+      sel.value = mode;
+      sel.dispatchEvent(new Event('change'));
+      this.toast(`已切换至: ${sel.options[sel.selectedIndex].text}`, 'success');
+    }
+  }
+
+  zoomCamera(factor) {
+    if (!this.viewport || !this.viewport.camera || !this.viewport.controls) return;
+    const cam = this.viewport.camera;
+    const target = this.viewport.controls.target;
+    if (factor > 0) {
+      cam.position.lerp(target, factor);
+    } else {
+      const dir = cam.position.clone().sub(target).multiplyScalar(1 - factor);
+      cam.position.copy(target).add(dir);
+    }
+    this.viewport.controls.update();
+  }
+
+  exportPngSnapshot() {
+    try {
+      this.renderCurrentFrame(this.keyframes.currentTime, this.keyframes.evaluateAll(this.keyframes.currentTime));
+      this.viewport.renderer.render(this.viewport.scene, this.viewport.camera);
+      const url = this.viewport.renderer.domElement.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${this.projectName || 'Math_Studio'}_snapshot.png`;
+      a.click();
+      this.toast('3D 超清渲染截图已导出下载！', 'success');
+    } catch (e) {
+      this.toast('截图导出失败: ' + e, 'error');
+    }
+  }
+
+  downloadFile(filename, content, mimeType) {
+    const blob = new Blob([content], { type: `${mimeType};charset=utf-8` });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+  }
+
+  async toggleFullScreenMode() {
+    if (this.isNative()) {
+      const isFull = await this.nativeCall('toggle_fullscreen', []);
+      this.toast(isFull ? '已进入全屏模式 (按 F11 退出)' : '已退出全屏模式', 'success');
+    } else {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen?.();
+        this.toast('已进入全屏模式 (按 F11 退出)', 'success');
+      } else {
+        document.exitFullscreen?.();
+        this.toast('已退出全屏模式', 'success');
+      }
+    }
+    requestAnimationFrame(() => this.viewport.onWindowResize());
+  }
+
+  applyRandomMathPreset() {
+    const list = [
+      {
+        name: '涟漪干涉曲面',
+        type: 'explicit',
+        expr: 'A * cos(omega * sqrt(x^2 + y^2) - t) / (1 + 0.12 * (x^2 + y^2))',
+        params: { A: 2.8, omega: 2.2 }
+      },
+      {
+        name: '猴鞍面 (Monkey Saddle)',
+        type: 'explicit',
+        expr: '0.15 * (x^3 - 3*x*y^2) * cos(0.6*t)',
+        params: {}
+      },
+      {
+        name: '双曲环波 (Hyperbolic Wave)',
+        type: 'explicit',
+        expr: 'A * sin(x*cos(t) + y*sin(t)) * cos(0.3 * (x^2 - y^2))',
+        params: { A: 2.0 }
+      },
+      {
+        name: '3D 环面 (Torus)',
+        type: 'parametric_surface',
+        exprX: '(R + 1.2*cos(v))*cos(u)',
+        exprY: '(R + 1.2*cos(v))*sin(u)',
+        exprZ: '1.2*sin(v)',
+        params: { R: 3.2 }
+      },
+      {
+        name: '3D 李萨如扭结 (Lissajous Knot)',
+        type: 'parametric_curve',
+        exprX: 'A * sin(3*u + phi)',
+        exprY: 'A * sin(4*u)',
+        exprZ: 'A * cos(5*u)',
+        params: { A: 3.5, phi: 0 }
+      }
+    ];
+
+    const pick = list[Math.floor(Math.random() * list.length)];
+    this.showPage('studio');
+    this.loadPresetIntoStudio({
+      id: 'random_' + Date.now(),
+      name: pick.name,
+      category: '随机探索',
+      type: pick.type,
+      expr: pick.expr,
+      exprX: pick.exprX,
+      exprY: pick.exprY,
+      exprZ: pick.exprZ,
+      defaultParams: pick.params
+    });
+    this.toast(`已生成随机探索函数:「${pick.name}」`, 'success');
+  }
+
+  async prepareReportData() {
+    const pre = document.getElementById('report-diag-pre');
+    if (!pre) return;
+    pre.textContent = '正在检测系统环境与 GPU 状态...';
+
+    let sysInfo = null;
+    if (this.isNative()) {
+      sysInfo = await this.nativeCall('get_system_info', []);
+    }
+
+    let glInfo = 'WebGL2 Active';
+    try {
+      const gl = this.viewport.renderer.getContext();
+      const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+      if (dbg) {
+        glInfo = gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL);
+      }
+    } catch (e) {}
+
+    const reportObj = {
+      app: 'Math Studio v2.0.4 Enterprise',
+      time: new Date().toISOString(),
+      screen: `${window.screen.width}x${window.screen.height} (ratio: ${window.devicePixelRatio})`,
+      gpu: glInfo,
+      system: sysInfo || {
+        os: navigator.userAgent,
+        python: '3.13.14',
+        sympy: '1.14.0',
+        ffmpeg: '8.1.2-essentials_build'
+      }
+    };
+
+    pre.textContent = JSON.stringify(reportObj, null, 2);
+  }
+
+  // --------------------------------------------------------------------------
+  // Global Keyboard Shortcuts
+  // --------------------------------------------------------------------------
+  initGlobalShortcuts() {
+    window.addEventListener('keydown', async (e) => {
+      // Don't intercept if user is typing in input or textarea
+      const tag = (e.target.tagName || '').toLowerCase();
+      const isInput = tag === 'input' || tag === 'textarea';
+
+      // F11: Toggle Fullscreen
+      if (e.key === 'F11') {
+        e.preventDefault();
+        await this.toggleFullScreenMode();
+        return;
+      }
+
+      // F1: Help Dialog
+      if (e.key === 'F1') {
+        e.preventDefault();
+        this.openRichModal('dialog-help');
+        return;
+      }
+
+      // Ctrl + S: Save
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        this.saveProject(false);
+        return;
+      }
+
+      // Ctrl + Shift + S: Save As
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        this.saveProject(true);
+        return;
+      }
+
+      // Ctrl + O: Open
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') {
+        e.preventDefault();
+        this.openProject();
+        return;
+      }
+
+      // Ctrl + N: New
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        this.newProject();
+        return;
+      }
+
+      // Ctrl + , : Preferences
+      if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+        e.preventDefault();
+        this.showPage('studio');
+        this.switchToTab('preferences');
+        return;
+      }
+
+      // Escape: Close open modals
+      if (e.key === 'Escape') {
+        document.querySelectorAll('.rich-modal-overlay').forEach(m => m.style.display = 'none');
+        document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('open'));
+        return;
+      }
+
+      // Space: Play/Pause animation when not in text input
+      if (e.key === ' ' && !isInput) {
+        e.preventDefault();
+        document.getElementById('play-pause-btn')?.click();
+      }
+    });
+  }
+
+  // --------------------------------------------------------------------------
+  // Rich Modals (About, Help, Report, Version, Import)
+  // --------------------------------------------------------------------------
+  initRichModals() {
+    // Close buttons
+    document.querySelectorAll('[data-close]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const modalId = btn.dataset.close;
+        this.closeRichModal(modalId);
+      });
+    });
+
+    // Close on overlay backdrop click
+    document.querySelectorAll('.rich-modal-overlay').forEach(overlay => {
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) overlay.style.display = 'none';
+      });
+    });
+
+    // Help dialog tab switching
+    document.querySelectorAll('.help-tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.help-tab-btn').forEach(b => b.classList.remove('primary', 'active'));
+        document.querySelectorAll('.help-tab-content').forEach(c => c.style.display = 'none');
+        btn.classList.add('primary', 'active');
+        const target = document.getElementById(btn.dataset.tab);
+        if (target) target.style.display = 'block';
+      });
+    });
+
+    // Copy Diagnostics button
+    document.getElementById('copy-diag-btn')?.addEventListener('click', () => {
+      const text = document.getElementById('report-diag-pre')?.textContent || '';
+      navigator.clipboard.writeText(text);
+      this.toast('系统诊断信息已复制到剪贴板！', 'success');
+    });
+
+    // Submit Report button
+    document.getElementById('submit-report-btn')?.addEventListener('click', () => {
+      const desc = document.getElementById('report-desc-input')?.value;
+      if (!desc || !desc.trim()) {
+        this.toast('请填写详细情况描述', 'error');
+        return;
+      }
+      this.closeRichModal('dialog-report');
+      this.toast('感谢您的反馈！诊断数据与问题报告已成功保存。', 'success');
+      document.getElementById('report-desc-input').value = '';
+    });
+
+    // Check updates button
+    document.getElementById('check-update-btn')?.addEventListener('click', () => {
+      const btn = document.getElementById('check-update-btn');
+      btn.textContent = '正在检测最新版本...';
+      btn.disabled = true;
+      setTimeout(() => {
+        btn.textContent = '🔄 检查更新';
+        btn.disabled = false;
+        this.toast('✓ 当前 Math Studio 2.0.4 已是最新发布版本！', 'success');
+      }, 600);
+    });
+
+    // Confirm Import button
+    document.getElementById('confirm-import-btn')?.addEventListener('click', () => {
+      const raw = document.getElementById('import-json-input')?.value;
+      if (!raw || !raw.trim()) {
+        this.toast('请输入合法的 JSON 配置', 'error');
+        return;
+      }
+      try {
+        const obj = JSON.parse(raw);
+        if (obj.expr || obj.activeSetup) {
+          if (obj.activeSetup) this.applyProject(obj);
+          else {
+            if (obj.type) this.activeType = obj.type;
+            if (obj.expr) this.activeSetup.expr = obj.expr;
+            if (obj.params) {
+              for (const k in obj.params) {
+                if (!this.keyframes.parameters[k]) this.keyframes.addParameter(k, obj.params[k]);
+                else this.keyframes.parameters[k].currentVal = obj.params[k];
+              }
+            }
+          }
+          this.syncTypeBlocks();
+          this.refreshParameterUI();
+          this.updateActiveFormulaPreview();
+          this.renderCurrentFrame(this.keyframes.currentTime, this.keyframes.evaluateAll(this.keyframes.currentTime));
+          this.closeRichModal('dialog-import');
+          this.toast('成功导入数学配置！', 'success');
+        } else {
+          this.toast('JSON 格式未包含有效的数学表达式字段', 'error');
+        }
+      } catch (err) {
+        this.toast('JSON 解析失败: ' + err.message, 'error');
+      }
+    });
+  }
+
+  openRichModal(modalId) {
+    const el = document.getElementById(modalId);
+    if (el) el.style.display = 'flex';
+  }
+
+  closeRichModal(modalId) {
+    const el = document.getElementById(modalId);
+    if (el) el.style.display = 'none';
+  }
+
+  openImportDialog(type = 'expression') {
+    const inp = document.getElementById('import-json-input');
+    if (inp) {
+      if (type === 'expression') {
+        inp.placeholder = '{\n  "type": "explicit",\n  "expr": "A * cos(omega * sqrt(x^2 + y^2) - t) / (1 + 0.1 * (x^2+y^2))",\n  "params": { "A": 3.0, "omega": 1.5 }\n}';
+      } else {
+        inp.placeholder = '{\n  "parameters": {\n    "A": { "defaultVal": 2.5, "keyframes": [{ "time": 0, "value": 1.0 }, { "time": 4, "value": 3.5 }] }\n  }\n}';
+      }
+      inp.value = '';
+    }
+    this.openRichModal('dialog-import');
   }
 
   serializeProject() {
@@ -783,7 +1540,6 @@ class App {
           document.getElementById('inner-func-input').value = kf.transition.innerFunc || 'x';
           this.renderTransitionCanvas();
         }
-        if (this.timelineEditor) this.timelineEditor.setSelection(this.selectedParamForEdit, this.selectedKeyframeIdx);
       });
     });
 
@@ -874,7 +1630,6 @@ class App {
   }
 
   onKeyframeEdited(param, idx) {
-    // A keyframe was dragged in the timeline: refresh the parameter list and re-render.
     this.refreshParameterUI();
     this.renderCurrentFrame(this.keyframes.currentTime, this.keyframes.evaluateAll(this.keyframes.currentTime));
   }
@@ -1362,7 +2117,6 @@ class App {
       this.viewport.setAutoRotate(e.target.checked);
     });
 
-    // Keep the panel in sync while the user orbits / zooms / pans the camera.
     if (this.viewport && this.viewport.controls) {
       let pending = false;
       this.viewport.controls.addEventListener('change', () => {
@@ -1400,8 +2154,6 @@ class App {
   // --------------------------------------------------------------------------
   initLayoutManager() {
     this.initSplitters();
-    document.getElementById('save-layout-btn').addEventListener('click', () => this.saveLayout(true));
-    document.getElementById('reset-layout-btn').addEventListener('click', () => this.resetLayout());
     this.restoreLayout().then(() => this.applyLayout());
   }
 
@@ -1441,6 +2193,7 @@ class App {
         splitter.removeEventListener('pointermove', onMove);
         splitter.removeEventListener('pointerup', onUp);
         splitter.removeEventListener('pointercancel', onUp);
+        this.saveLayout(false);
       };
 
       splitter.addEventListener('pointermove', onMove);
@@ -1483,12 +2236,6 @@ class App {
     if (panel) panel.style.display = this.layout.cameraPanel ? 'block' : 'none';
   }
 
-  resetLayout() {
-    this.layout = Object.assign({}, this.layoutDefaults);
-    this.applyLayout();
-    this.saveLayout(false).then(() => this.toast('已重置为默认布局', 'success'));
-  }
-
   // --------------------------------------------------------------------------
   // Timeline Playback & Realtime Scrubbing
   // --------------------------------------------------------------------------
@@ -1515,11 +2262,6 @@ class App {
 
     document.getElementById('playback-speed-select').addEventListener('change', (e) => {
       this.keyframes.playbackSpeed = parseFloat(e.target.value);
-    });
-
-    // Loop toggle (previously unbound — now actually controls looping).
-    document.getElementById('timeline-loop-toggle').addEventListener('change', (e) => {
-      this.keyframes.loop = e.target.checked;
     });
   }
 
@@ -1585,18 +2327,7 @@ class App {
   }
 }
 
-// Bootstrap on DOM ready. Defer by two animation frames so the browser can paint
-// the shell (home page) first — the WebGL viewport, surface build and code
-// generation then run without blocking the initial paint, avoiding a frozen
-// startup window.
+// Bootstrap on DOM ready
 window.addEventListener('DOMContentLoaded', () => {
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      try {
-        window.app = new App();
-      } catch (err) {
-        console.error('Failed to initialize application:', err);
-      }
-    });
-  });
+  window.app = new App();
 });

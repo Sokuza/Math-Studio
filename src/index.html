@@ -10,6 +10,253 @@
 </head>
 <body>
   <!-- ====================================================================
+       Top Navigation Menu Bar (Math-Studio File Edit View Windows)
+       ==================================================================== -->
+  <header class="app-top-menubar" id="app-top-menubar">
+    <div class="menubar-left">
+      <!-- 1. Math-Studio Menu -->
+      <div class="menu-item" id="menu-math-studio">
+        <span class="menu-label brand"><span class="brand-m-mini">M</span> Math-Studio</span>
+        <div class="menu-dropdown">
+          <div class="menu-option" data-action="mathstudio-about">
+            <span class="opt-label">About (关于)</span>
+          </div>
+          <div class="menu-option" data-action="mathstudio-help">
+            <span class="opt-label">Help (帮助与文档)</span>
+            <span class="opt-shortcut">F1</span>
+          </div>
+          <div class="menu-option" data-action="mathstudio-report">
+            <span class="opt-label">Report (反馈与诊断)</span>
+          </div>
+          <div class="menu-divider"></div>
+          <div class="menu-option" data-action="mathstudio-version">
+            <span class="opt-label">Version (版本信息)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. File Menu -->
+      <div class="menu-item" id="menu-file">
+        <span class="menu-label">File</span>
+        <div class="menu-dropdown">
+          <div class="menu-option" data-action="file-new">
+            <span class="opt-label">New (新建项目)</span>
+            <span class="opt-shortcut">Ctrl+N</span>
+          </div>
+          <div class="menu-option" data-action="file-open">
+            <span class="opt-label">Open (打开项目...)</span>
+            <span class="opt-shortcut">Ctrl+O</span>
+          </div>
+          <div class="menu-divider"></div>
+          <div class="menu-option" data-action="file-save">
+            <span class="opt-label">Save (保存)</span>
+            <span class="opt-shortcut">Ctrl+S</span>
+          </div>
+          <div class="menu-option" data-action="file-save-as">
+            <span class="opt-label">Save As (另存为...)</span>
+            <span class="opt-shortcut">Ctrl+Shift+S</span>
+          </div>
+          <div class="menu-divider"></div>
+          <div class="menu-option has-submenu" data-action="file-import">
+            <span class="opt-label">Import (导入...)</span>
+            <span class="opt-arrow">▶</span>
+            <div class="menu-sub-dropdown">
+              <div class="menu-option" data-action="import-expression">
+                <span class="opt-label">导入数学公式 / 预设 JSON</span>
+              </div>
+              <div class="menu-option" data-action="import-keyframes">
+                <span class="opt-label">导入参数与关键帧动画</span>
+              </div>
+            </div>
+          </div>
+          <div class="menu-option has-submenu" data-action="file-export">
+            <span class="opt-label">Export (导出...)</span>
+            <span class="opt-arrow">▶</span>
+            <div class="menu-sub-dropdown">
+              <div class="menu-option" data-action="export-mp4">
+                <span class="opt-label">导出为高清 .mp4 视频</span>
+              </div>
+              <div class="menu-option" data-action="export-threejs">
+                <span class="opt-label">导出独立 HTML5+Three.js</span>
+              </div>
+              <div class="menu-option" data-action="export-python">
+                <span class="opt-label">导出 Python 动画脚本</span>
+              </div>
+              <div class="menu-option" data-action="export-png">
+                <span class="opt-label">导出当前 3D 帧 PNG 截图</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Edit Menu -->
+      <div class="menu-item" id="menu-edit">
+        <span class="menu-label">Edit</span>
+        <div class="menu-dropdown">
+          <div class="menu-option" data-action="edit-preferences">
+            <span class="opt-label">Preferences (偏好设置)</span>
+            <span class="opt-shortcut">Ctrl+,</span>
+          </div>
+          <div class="menu-divider"></div>
+          <div class="menu-option has-submenu" data-action="edit-mode">
+            <span class="opt-label">Mode (模式切换)</span>
+            <span class="opt-arrow">▶</span>
+            <div class="menu-sub-dropdown">
+              <div class="menu-option" data-action="mode-explicit"><span class="opt-label">显式曲面 z = f(x, y, t)</span></div>
+              <div class="menu-option" data-action="mode-curve"><span class="opt-label">空间参数曲线 (x, y, z)</span></div>
+              <div class="menu-option" data-action="mode-surface"><span class="opt-label">三维参数曲面 (u, v)</span></div>
+              <div class="menu-option" data-action="mode-vector"><span class="opt-label">三维向量场 F(x, y, z)</span></div>
+            </div>
+          </div>
+          <div class="menu-option has-submenu" data-action="edit-operation">
+            <span class="opt-label">Operation (微积分与数学操作)</span>
+            <span class="opt-arrow">▶</span>
+            <div class="menu-sub-dropdown">
+              <div class="menu-option" data-action="op-partials"><span class="opt-label">计算偏导数与梯度 ∇f</span></div>
+              <div class="menu-option" data-action="op-integral"><span class="opt-label">计算定积分与黎曼和</span></div>
+              <div class="menu-option" data-action="op-tangent-plane"><span class="opt-label">开关切平面 (Tangent Plane)</span></div>
+              <div class="menu-option" data-action="op-gradient-field"><span class="opt-label">开关梯度矢量场指示</span></div>
+            </div>
+          </div>
+          <div class="menu-divider"></div>
+          <div class="menu-option has-submenu" data-action="edit-more">
+            <span class="opt-label">More (更多操作)</span>
+            <span class="opt-arrow">▶</span>
+            <div class="menu-sub-dropdown">
+              <div class="menu-option" data-action="more-reset-params"><span class="opt-label">重置所有参数为默认值</span></div>
+              <div class="menu-option" data-action="more-clear-keyframes"><span class="opt-label">清空所有关键帧时间轴</span></div>
+              <div class="menu-option" data-action="more-random-math"><span class="opt-label">随机生成探索数学函数</span></div>
+              <div class="menu-option" data-action="more-copy-formula"><span class="opt-label">复制当前 LaTeX 公式</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. View Menu -->
+      <div class="menu-item" id="menu-view">
+        <span class="menu-label">View</span>
+        <div class="menu-dropdown">
+          <div class="menu-option has-submenu" data-action="view-layout">
+            <span class="opt-label">Layout (界面布局)</span>
+            <span class="opt-arrow">▶</span>
+            <div class="menu-sub-dropdown">
+              <div class="menu-option" data-action="layout-split"><span class="opt-label">经典双栏模式 (工作台+3D视口)</span></div>
+              <div class="menu-option" data-action="layout-fullscreen-3d"><span class="opt-label">纯净 3D 沉浸模式 (收起面板)</span></div>
+              <div class="menu-divider"></div>
+              <div class="menu-option" data-action="layout-home"><span class="opt-label">切换至项目主页 (Resource Hub)</span></div>
+              <div class="menu-option" data-action="layout-studio"><span class="opt-label">切换至工作台 (Math Studio)</span></div>
+            </div>
+          </div>
+          <div class="menu-option has-submenu" data-action="view-theme">
+            <span class="opt-label">Theme (外观主题)</span>
+            <span class="opt-arrow">▶</span>
+            <div class="menu-sub-dropdown">
+              <div class="menu-option" data-action="theme-dark"><span class="opt-label">Windows 11 深色模式 (Dark Mica)</span></div>
+              <div class="menu-option" data-action="theme-light"><span class="opt-label">Windows 11 浅色模式 (Light Mica)</span></div>
+              <div class="menu-option" data-action="theme-black"><span class="opt-label">纯黑赛博专注模式 (Pure Black)</span></div>
+            </div>
+          </div>
+          <div class="menu-option has-submenu" data-action="view-zoom">
+            <span class="opt-label">Zoom (视角与缩放)</span>
+            <span class="opt-arrow">▶</span>
+            <div class="menu-sub-dropdown">
+              <div class="menu-option" data-action="zoom-iso"><span class="opt-label">三维等轴视角 (Isometric)</span></div>
+              <div class="menu-option" data-action="zoom-top"><span class="opt-label">顶视图 (Top XY View)</span></div>
+              <div class="menu-option" data-action="zoom-front"><span class="opt-label">正视图 (Front XZ View)</span></div>
+              <div class="menu-divider"></div>
+              <div class="menu-option" data-action="zoom-in"><span class="opt-label">视口放大 (Zoom In)</span></div>
+              <div class="menu-option" data-action="zoom-out"><span class="opt-label">视口缩小 (Zoom Out)</span></div>
+              <div class="menu-option" data-action="zoom-reset"><span class="opt-label">重置默认相机视角</span></div>
+            </div>
+          </div>
+          <div class="menu-divider"></div>
+          <div class="menu-option" data-action="view-wireframe-toggle">
+            <span class="opt-label">切换网格线框 (Wireframe)</span>
+          </div>
+          <div class="menu-option" data-action="view-axes-toggle">
+            <span class="opt-label">切换三维坐标矢量轴</span>
+          </div>
+          <div class="menu-option" data-action="view-grid-toggle">
+            <span class="opt-label">切换水平基准网格</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5. Windows Menu -->
+      <div class="menu-item" id="menu-windows">
+        <span class="menu-label">Windows</span>
+        <div class="menu-dropdown">
+          <div class="menu-option" data-action="win-fullscreen">
+            <span class="opt-label">Full Screen (全屏模式开关)</span>
+            <span class="opt-shortcut">F11</span>
+          </div>
+          <div class="menu-option" data-action="win-maximize">
+            <span class="opt-label">Maximize (最大化窗口)</span>
+          </div>
+          <div class="menu-option" data-action="win-restore">
+            <span class="opt-label">Restore (还原窗口大小)</span>
+          </div>
+          <div class="menu-option" data-action="win-minimize">
+            <span class="opt-label">Minimize (最小化至任务栏)</span>
+          </div>
+          <div class="menu-divider"></div>
+          <div class="menu-option" data-action="win-reset-size">
+            <span class="opt-label">Reset Size (恢复标准 1380×880)</span>
+          </div>
+          <div class="menu-option" data-action="win-dev-tools">
+            <span class="opt-label">Toggle Performance HUD (性能与帧率面板)</span>
+          </div>
+          <div class="menu-divider"></div>
+          <div class="menu-option" data-action="win-exit" style="color: #ff5555;">
+            <span class="opt-label">Exit (退出程序)</span>
+            <span class="opt-shortcut">Alt+F4</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Center: Active Project Pill -->
+    <div class="menubar-center">
+      <div class="current-project-pill" id="menubar-project-pill" title="点击重命名当前项目">
+        <span class="project-pill-dot"></span>
+        <span id="menubar-project-name">未命名项目</span>
+      </div>
+    </div>
+
+    <!-- Right: Quick actions & Window Controls (Minimalist monochrome vector icons) -->
+    <div class="menubar-right">
+      <button class="menu-tool-btn" id="menubar-save-btn" title="快捷保存 (Ctrl+S)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+          <polyline points="17 21 17 13 7 13 7 21"></polyline>
+          <polyline points="7 3 7 8 15 8"></polyline>
+        </svg>
+      </button>
+      <button class="menu-tool-btn" id="menubar-theme-btn" title="切换深色/浅色模式">
+        <svg class="theme-icon-svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18V4c4.41 0 8 3.59 8 8s-3.59 8-8 8z"/>
+        </svg>
+      </button>
+      <div class="menubar-divider"></div>
+      <button class="menu-window-control-btn" id="win-btn-minimize" title="最小化">
+        <svg width="10" height="1" viewBox="0 0 10 1"><rect width="10" height="1" fill="currentColor"/></svg>
+      </button>
+      <button class="menu-window-control-btn" id="win-btn-fullscreen" title="全屏切换 (F11)">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+      </button>
+      <button class="menu-window-control-btn" id="win-btn-maximize" title="最大化/还原">
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="0.6" y="0.6" width="8.8" height="8.8"/></svg>
+      </button>
+      <button class="menu-window-control-btn close" id="win-btn-close" title="关闭程序">
+        <svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.2"><line x1="0" y1="0" x2="10" y2="10"/><line x1="10" y1="0" x2="0" y2="10"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Viewport containing Page 1 (Home) and Page 2 (Studio) -->
+  <main class="app-main-viewport">
+  <!-- ====================================================================
        Page 1: Project Resource Window (项目资源窗口)
        ==================================================================== -->
   <div id="page-home" class="app-page active">
@@ -113,7 +360,11 @@
         <div class="footer-actions">
           <button id="save-project-btn" class="win11-btn sm" title="保存当前项目">保存</button>
           <button id="back-home-btn" class="win11-btn sm" title="返回项目资源窗口">返回</button>
-          <button id="theme-toggle-btn" class="hud-btn" title="切换深色/浅色模式">•</button>
+          <button id="theme-toggle-btn" class="hud-btn" title="切换深色/浅色模式">
+            <svg class="theme-icon-svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18V4c4.41 0 8 3.59 8 8s-3.59 8-8 8z"/>
+            </svg>
+          </button>
         </div>
       </div>
     </aside>
@@ -371,9 +622,28 @@
             <div class="card-info">
               <div class="card-icon">⏳</div>
               <div class="card-text">
-                <div class="card-title">动画总时长与循环播放</div>
-                <div class="card-desc">时长与循环开关已集成到右侧 3D 视图下方的时间轴工具栏中，可在此处或工具栏内调整。</div>
+                <div class="card-title">动画总时长 (秒)</div>
+                <div class="card-desc">定义关键帧动画的时间跨度</div>
               </div>
+            </div>
+            <div class="card-control">
+              <input type="number" id="timeline-duration-input" class="win11-input" style="width: 80px;" value="8.0" min="1" max="60" step="0.5">
+            </div>
+          </div>
+
+          <div class="win11-card">
+            <div class="card-info">
+              <div class="card-icon">🔁</div>
+              <div class="card-text">
+                <div class="card-title">循环往复播放</div>
+                <div class="card-desc">播放至终点后自动回到起始位置</div>
+              </div>
+            </div>
+            <div class="card-control">
+              <label class="win11-toggle">
+                <input type="checkbox" id="timeline-loop-toggle" checked>
+                <span class="toggle-slider"></span>
+              </label>
             </div>
           </div>
 
@@ -840,22 +1110,6 @@
             </div>
           </div>
 
-          <div class="section-group-title">工作区布局</div>
-
-          <div class="win11-card">
-            <div class="card-info">
-              <div class="card-icon">🗔</div>
-              <div class="card-text">
-                <div class="card-title">保存与恢复工作区排版</div>
-                <div class="card-desc">记住侧边栏宽度、设置面板宽度、时间轴高度与摄像机面板状态，下次启动自动恢复</div>
-              </div>
-            </div>
-            <div class="card-control">
-              <button id="save-layout-btn" class="win11-btn sm primary">保存当前布局</button>
-              <button id="reset-layout-btn" class="win11-btn sm">重置默认</button>
-            </div>
-          </div>
-
           <div class="section-group-title">系统环境检测</div>
 
           <div class="win11-card">
@@ -966,12 +1220,6 @@
             </div>
 
             <div class="timeline-toolbar-right">
-              <span class="timeline-tool-label">时长</span>
-              <input type="number" id="timeline-duration-input" class="win11-input" style="width: 64px;" value="8.0" min="1" max="60" step="0.5">
-              <label class="win11-toggle" title="循环播放" style="transform: scale(0.82);">
-                <input type="checkbox" id="timeline-loop-toggle" checked>
-                <span class="toggle-slider"></span>
-              </label>
               <select id="playback-speed-select" class="win11-select" style="padding: 3px 8px; font-size: 11px;">
                 <option value="0.5">0.5x</option>
                 <option value="1.0" selected>1.0x</option>
@@ -991,6 +1239,288 @@
 
   </div>
   </div><!-- /#page-studio -->
+  </main><!-- /.app-main-viewport -->
+
+  <!-- ====================================================================
+       Rich Modals: About, Help, Report, Version, Import
+       ==================================================================== -->
+
+  <!-- Modal 1: About Dialog -->
+  <div id="dialog-about" class="rich-modal-overlay">
+    <div class="rich-modal-box" style="width: 540px;">
+      <div class="rich-modal-header">
+        <div class="rich-modal-title">
+          <span class="brand-m-mini">M</span>
+          <span>关于 Math Studio</span>
+        </div>
+        <button class="rich-modal-close" data-close="dialog-about">✕</button>
+      </div>
+      <div class="rich-modal-body">
+        <div style="display: flex; gap: 16px; align-items: center; margin-bottom: 18px; padding-bottom: 16px; border-bottom: 1px solid var(--win-border-subtle);">
+          <div style="width: 64px; height: 64px; background: linear-gradient(135deg, #0078d4, #005a9e); border-radius: 14px; display: flex; align-items: center; justify-content: center; font-family: 'Times New Roman', Georgia, serif; font-size: 38px; font-weight: bold; color: #fff; box-shadow: 0 8px 24px rgba(0, 120, 212, 0.45);">M</div>
+          <div>
+            <h2 style="font-size: 20px; font-weight: 600;">Math Studio</h2>
+            <p style="font-size: 13px; color: var(--win-accent);">v2.0.4 Windows 11 Fluent Edition</p>
+            <p style="font-size: 12px; color: var(--win-text-secondary); margin-top: 3px;">高级数学函数与复合动画可视化工作台</p>
+          </div>
+        </div>
+
+        <p style="margin-bottom: 12px; font-size: 13px; line-height: 1.7;">
+          Math Studio 是一款基于 Windows 11 Fluent Design（云母 Mica、亚克力与 Segoe UI 规范）打造的高级数学可视化桌面软件。集成了高性能 WebGL2 3D 向量图形、SymPy 符号微积分代数内核、任意参数关键帧复合变换与 FFmpeg 60fps 硬件视频编码管线。
+        </p>
+
+        <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid var(--win-border-subtle); border-radius: 8px; padding: 12px 14px; font-size: 12.5px; margin-bottom: 12px;">
+          <div style="font-weight: 600; margin-bottom: 6px; color: var(--win-text-primary);">核心技术体系</div>
+          <div style="color: var(--win-text-secondary); line-height: 1.8;">
+            • <b>3D 视口</b>：Three.js r186 (曲面 / 空间曲线 / Frenet 标架 / 向量场)<br>
+            • <b>代数内核</b>：Python 3.13 + SymPy 1.14 (符号求导 / 偏导 / 梯度 / 积分)<br>
+            • <b>动画引擎</b>：多参数时间轴 + 任意两帧间复合函数嵌套 g(f(τ))<br>
+            • <b>视频管线</b>：FFmpeg 8.1 硬件编码器 (无损 H.264 60fps MP4 渲染)
+          </div>
+        </div>
+
+        <div style="font-size: 11.5px; color: var(--win-text-tertiary); text-align: center;">
+          Copyright © 2026 Math Studio Project Team. All rights reserved.
+        </div>
+      </div>
+      <div class="rich-modal-footer">
+        <button class="win11-btn primary" data-close="dialog-about">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: Help Dialog -->
+  <div id="dialog-help" class="rich-modal-overlay">
+    <div class="rich-modal-box" style="width: 720px;">
+      <div class="rich-modal-header">
+        <div class="rich-modal-title">
+          <span>❓</span>
+          <span>帮助与使用指南</span>
+        </div>
+        <button class="rich-modal-close" data-close="dialog-help">✕</button>
+      </div>
+      <div class="rich-modal-body">
+        <!-- Help Navigation Tabs -->
+        <div class="code-tabs" style="margin-bottom: 14px; display: flex; gap: 8px; border-bottom: 1px solid var(--win-border-subtle); padding-bottom: 8px;">
+          <button class="win11-btn sm primary help-tab-btn active" data-tab="help-shortcuts">快捷键一览</button>
+          <button class="win11-btn sm help-tab-btn" data-tab="help-syntax">函数语法速查</button>
+          <button class="win11-btn sm help-tab-btn" data-tab="help-keyframes">关键帧与复合函数</button>
+          <button class="win11-btn sm help-tab-btn" data-tab="help-calculus">微积分与3D操作</button>
+        </div>
+
+        <div id="help-shortcuts" class="help-tab-content active" style="font-size: 13px;">
+          <table style="width: 100%; border-collapse: collapse; line-height: 2;">
+            <thead>
+              <tr style="border-bottom: 1px solid var(--win-border-subtle); color: var(--win-text-secondary); text-align: left;">
+                <th style="padding: 6px 10px;">快捷键</th>
+                <th style="padding: 6px 10px;">功能说明</th>
+                <th style="padding: 6px 10px;">作用范围</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);">
+                <td style="padding: 6px 10px;"><kbd style="background: rgba(255,255,255,0.1); padding: 2px 7px; border-radius: 4px; font-family: var(--win-font-mono);">F11</kbd></td>
+                <td style="padding: 6px 10px;">切换全屏模式 (Full Screen Toggle)</td>
+                <td style="padding: 6px 10px; color: var(--win-text-secondary);">全局</td>
+              </tr>
+              <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);">
+                <td style="padding: 6px 10px;"><kbd style="background: rgba(255,255,255,0.1); padding: 2px 7px; border-radius: 4px; font-family: var(--win-font-mono);">Ctrl + S</kbd></td>
+                <td style="padding: 6px 10px;">快速保存当前项目</td>
+                <td style="padding: 6px 10px; color: var(--win-text-secondary);">全局</td>
+              </tr>
+              <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);">
+                <td style="padding: 6px 10px;"><kbd style="background: rgba(255,255,255,0.1); padding: 2px 7px; border-radius: 4px; font-family: var(--win-font-mono);">Ctrl + Shift + S</kbd></td>
+                <td style="padding: 6px 10px;">当前项目另存为新文件</td>
+                <td style="padding: 6px 10px; color: var(--win-text-secondary);">全局</td>
+              </tr>
+              <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);">
+                <td style="padding: 6px 10px;"><kbd style="background: rgba(255,255,255,0.1); padding: 2px 7px; border-radius: 4px; font-family: var(--win-font-mono);">Ctrl + O</kbd></td>
+                <td style="padding: 6px 10px;">打开已有项目文件 (.mathstudio.json)</td>
+                <td style="padding: 6px 10px; color: var(--win-text-secondary);">全局</td>
+              </tr>
+              <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);">
+                <td style="padding: 6px 10px;"><kbd style="background: rgba(255,255,255,0.1); padding: 2px 7px; border-radius: 4px; font-family: var(--win-font-mono);">Ctrl + N</kbd></td>
+                <td style="padding: 6px 10px;">新建空白项目</td>
+                <td style="padding: 6px 10px; color: var(--win-text-secondary);">全局</td>
+              </tr>
+              <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);">
+                <td style="padding: 6px 10px;"><kbd style="background: rgba(255,255,255,0.1); padding: 2px 7px; border-radius: 4px; font-family: var(--win-font-mono);">Space (空格)</kbd></td>
+                <td style="padding: 6px 10px;">播放 / 暂停关键帧动画</td>
+                <td style="padding: 6px 10px; color: var(--win-text-secondary);">工作台</td>
+              </tr>
+              <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);">
+                <td style="padding: 6px 10px;"><kbd style="background: rgba(255,255,255,0.1); padding: 2px 7px; border-radius: 4px; font-family: var(--win-font-mono);">鼠标左键拖拽</kbd></td>
+                <td style="padding: 6px 10px;">3D 视角环绕旋转 (Orbit)</td>
+                <td style="padding: 6px 10px; color: var(--win-text-secondary);">3D 视口</td>
+              </tr>
+              <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);">
+                <td style="padding: 6px 10px;"><kbd style="background: rgba(255,255,255,0.1); padding: 2px 7px; border-radius: 4px; font-family: var(--win-font-mono);">鼠标右键拖拽</kbd></td>
+                <td style="padding: 6px 10px;">3D 视角平移 (Pan)</td>
+                <td style="padding: 6px 10px; color: var(--win-text-secondary);">3D 视口</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 10px;"><kbd style="background: rgba(255,255,255,0.1); padding: 2px 7px; border-radius: 4px; font-family: var(--win-font-mono);">鼠标滚轮</kbd></td>
+                <td style="padding: 6px 10px;">3D 相机推进 / 拉远 (Zoom)</td>
+                <td style="padding: 6px 10px; color: var(--win-text-secondary);">3D 视口</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div id="help-syntax" class="help-tab-content" style="display: none; font-size: 13px;">
+          <p style="margin-bottom: 10px; color: var(--win-text-secondary);">Math Studio 支持标准数学表达式输入，支持次方符号 <code>^</code> 与 <code>**</code>：</p>
+          <div style="background: rgba(0,0,0,0.25); border-radius: 8px; padding: 12px; font-family: var(--win-font-mono); font-size: 12.5px; line-height: 1.8;">
+            <b>三角函数:</b> sin(x), cos(x), tan(x), asin(x), acos(x), atan(x)<br>
+            <b>双曲函数:</b> sinh(x), cosh(x), tanh(x)<br>
+            <b>指数对数:</b> exp(x), log(x) (自然对数), log10(x), sqrt(x), abs(x)<br>
+            <b>特殊函数:</b> sinc(x) = sin(x)/x, sigmoid(x) = 1/(1+e^-x)<br>
+            <b>常数常量:</b> pi (π ≈ 3.14159), e (自然底数 ≈ 2.71828)<br>
+            <b>动态参数:</b> t (时间), A (振幅), omega (角频率), phi (相位), R (半径) 等任意自定义参数
+          </div>
+        </div>
+
+        <div id="help-keyframes" class="help-tab-content" style="display: none; font-size: 13px; line-height: 1.7;">
+          <p><b>任意参数 K 动画原理：</b></p>
+          <p>在「关键帧与复合函数动画」面板中，您可以创建任意命名参数。在时间轴的任意位置点击「+ 加关键帧」，即可绑定该时刻的目标数值。</p>
+          <div style="margin: 10px 0; padding: 10px 14px; background: rgba(0, 120, 212, 0.1); border-left: 3px solid var(--win-accent); border-radius: 4px;">
+            <b>两关键帧间嵌套复合变换 g(f(τ))：</b><br>
+            当时间在两关键帧 [t₁, t₂] 之间前进时，标准化进度 τ = (t - t₁)/(t₂ - t₁) ∈ [0, 1]。参数值按复合函数 V(t) = V₁ + (V₂ - V₁) · g(f(τ)) 变换。支持 S 型平滑、阻尼衰减谐振、多重弹跳、陡峭跃迁及自定义嵌套公式！
+          </div>
+        </div>
+
+        <div id="help-calculus" class="help-tab-content" style="display: none; font-size: 13px; line-height: 1.7;">
+          <p><b>微积分分析与 3D 可视化：</b></p>
+          <p>• <b>符号求导</b>：一键调用本地 SymPy 计算曲面一阶/二阶偏导数 ∂z/∂x、∂z/∂y 以及梯度矢量 ∇f。</p>
+          <p>• <b>切平面 (Tangent Plane)</b>：勾选切平面开关，并在切点输入框指定 (x₀, y₀)，曲面上将实时生成切点法向量与一阶线性近似切平面。</p>
+          <p>• <b>梯度矢量场 (Gradient Field)</b>：在曲面网格上直接绘制指向最陡上升方向的矢量箭头。</p>
+        </div>
+      </div>
+      <div class="rich-modal-footer">
+        <button class="win11-btn primary" data-close="dialog-help">我知道了</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: Report Dialog -->
+  <div id="dialog-report" class="rich-modal-overlay">
+    <div class="rich-modal-box" style="width: 600px;">
+      <div class="rich-modal-header">
+        <div class="rich-modal-title">
+          <span>📢</span>
+          <span>反馈与问题诊断</span>
+        </div>
+        <button class="rich-modal-close" data-close="dialog-report">✕</button>
+      </div>
+      <div class="rich-modal-body">
+        <p style="margin-bottom: 12px; font-size: 13px; color: var(--win-text-secondary);">
+          如果您在使用 Math Studio 过程中遇到问题或有任何功能建议，请随时向我们反馈：
+        </p>
+
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 12px; font-weight: 500; display: block; margin-bottom: 5px;">问题类别</label>
+          <select id="report-type-select" class="win11-select" style="width: 100%;">
+            <option value="bug">软件运行或功能异常 (Bug)</option>
+            <option value="formula">数学表达式计算或渲染错误</option>
+            <option value="export">MP4 视频导出或 FFmpeg 编码问题</option>
+            <option value="performance">3D 视口卡顿或性能优化建议</option>
+            <option value="feature">新功能建议与需求</option>
+          </select>
+        </div>
+
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 12px; font-weight: 500; display: block; margin-bottom: 5px;">详细情况描述</label>
+          <textarea id="report-desc-input" class="win11-input" rows="4" style="width: 100%; resize: vertical;" placeholder="请详细描述发生问题的场景、输入函数或重现步骤..."></textarea>
+        </div>
+
+        <div>
+          <label style="font-size: 12px; font-weight: 500; display: block; margin-bottom: 5px;">系统与硬件运行诊断信息 (自动采集)</label>
+          <pre id="report-diag-pre" style="background: #181818; border: 1px solid var(--win-border-subtle); border-radius: 6px; padding: 10px; font-size: 11px; font-family: var(--win-font-mono); color: #00ff88; max-height: 110px; overflow-y: auto;">正在采集环境数据...</pre>
+        </div>
+      </div>
+      <div class="rich-modal-footer">
+        <button id="copy-diag-btn" class="win11-btn">📋 复制诊断报告</button>
+        <button id="submit-report-btn" class="win11-btn primary">发送反馈</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 4: Version Dialog -->
+  <div id="dialog-version" class="rich-modal-overlay">
+    <div class="rich-modal-box" style="width: 500px;">
+      <div class="rich-modal-header">
+        <div class="rich-modal-title">
+          <span>🏷️</span>
+          <span>版本与组件状态</span>
+        </div>
+        <button class="rich-modal-close" data-close="dialog-version">✕</button>
+      </div>
+      <div class="rich-modal-body">
+        <div style="text-align: center; margin-bottom: 16px;">
+          <div style="font-size: 20px; font-weight: 600;">Math Studio 2.0</div>
+          <div style="font-size: 12px; color: var(--win-text-secondary); margin-top: 2px;">版本编号: 2.0.4.20261017 (Release)</div>
+          <div style="display: inline-block; padding: 3px 10px; background: rgba(0, 255, 136, 0.15); color: #00ff88; border-radius: 12px; font-size: 11px; margin-top: 8px; font-weight: 500;">● 全部运行组件就绪</div>
+        </div>
+
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--win-border-subtle); border-radius: 8px; padding: 12px 14px; font-size: 12px;">
+          <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.04);">
+            <span style="color: var(--win-text-secondary);">3D 矢量渲染引擎</span>
+            <span style="font-family: var(--win-font-mono); color: var(--win-accent);">Three.js WebGL2</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.04);">
+            <span style="color: var(--win-text-secondary);">符号微积分引擎</span>
+            <span style="font-family: var(--win-font-mono); color: var(--win-accent);">SymPy 1.14 (Python 3.13)</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.04);">
+            <span style="color: var(--win-text-secondary);">高速客户端解析器</span>
+            <span style="font-family: var(--win-font-mono); color: var(--win-accent);">Math.js 12.4</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.04);">
+            <span style="color: var(--win-text-secondary);">高清公式排版</span>
+            <span style="font-family: var(--win-font-mono); color: var(--win-accent);">KaTeX 0.16</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.04);">
+            <span style="color: var(--win-text-secondary);">视频编码硬件管线</span>
+            <span style="font-family: var(--win-font-mono); color: var(--win-accent);">FFmpeg 8.1.2 libx264</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 4px 0;">
+            <span style="color: var(--win-text-secondary);">原生桌面运行外壳</span>
+            <span style="font-family: var(--win-font-mono); color: var(--win-accent);">PyWebView 6.2 + EdgeChromium</span>
+          </div>
+        </div>
+      </div>
+      <div class="rich-modal-footer">
+        <button id="check-update-btn" class="win11-btn">🔄 检查更新</button>
+        <button class="win11-btn primary" data-close="dialog-version">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 5: Import Dialog -->
+  <div id="dialog-import" class="rich-modal-overlay">
+    <div class="rich-modal-box" style="width: 580px;">
+      <div class="rich-modal-header">
+        <div class="rich-modal-title">
+          <span>📥</span>
+          <span>导入数据与数学配置</span>
+        </div>
+        <button class="rich-modal-close" data-close="dialog-import">✕</button>
+      </div>
+      <div class="rich-modal-body">
+        <p style="margin-bottom: 10px; font-size: 13px; color: var(--win-text-secondary);">
+          请在下方粘贴合法的 JSON 配置（支持项目数据、预设函数、或者关键帧参数数组）：
+        </p>
+        <textarea id="import-json-input" class="win11-input mono" rows="8" style="width: 100%; font-size: 12px;" placeholder='{
+  "expr": "A * sin(omega * sqrt(x^2 + y^2) - t)",
+  "type": "explicit",
+  "params": { "A": 3.0, "omega": 1.5 }
+}'></textarea>
+      </div>
+      <div class="rich-modal-footer">
+        <button class="win11-btn" data-close="dialog-import">取消</button>
+        <button id="confirm-import-btn" class="win11-btn primary">解析并导入</button>
+      </div>
+    </div>
+  </div>
 
   <!-- In-app Modal (prompt / confirm replacement; pywebview lacks native JS dialogs) -->
   <div id="modal-overlay" class="modal-overlay" style="display: none;">

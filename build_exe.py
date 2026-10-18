@@ -57,8 +57,6 @@ def build():
         "--add-data=web_dist;web_dist",
         "--add-data=app_icon.ico;.",
         "--add-data=app_icon.png;.",
-        "--add-data=loading.html;.",
-        "--add-data=assets;assets",
         "--collect-all=webview",
         "--collect-all=clr_loader",
         "--collect-all=pythonnet",

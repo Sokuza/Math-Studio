@@ -206,7 +206,6 @@ export class Viewport3D {
   }
 
   frameAll() {
-    // Compute a bounding sphere for all visible scene content, then fit the camera to it.
     const box = new THREE.Box3();
     const target = this.controls.target;
     let found = false;
@@ -672,9 +671,7 @@ export class Viewport3D {
 
   animate() {
     requestAnimationFrame(this.animate);
-    // Skip rendering when the container is hidden or has no size (e.g. the studio
-    // page is not the active page), which avoids wasted GPU work and startup churn.
-    if (this.container.clientWidth === 0 || this.container.clientHeight === 0) {
+    if (!this.container || this.container.clientWidth === 0 || this.container.clientHeight === 0) {
       return;
     }
     this.controls.update();

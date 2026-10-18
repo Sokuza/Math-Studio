@@ -483,30 +483,6 @@ body, html {
   font-family: var(--win-font-mono);
 }
 
-/* --------------------------------------------------------------------------
-   Dropdown (select) backgrounds: keep them dark gray in dark mode so the
-   closed control and its option list do not appear white and clash with text.
-   -------------------------------------------------------------------------- */
-[data-theme="dark"] .win11-select {
-  background-color: #2b2b2b;
-  color: #ffffff;
-}
-[data-theme="dark"] .win11-select option {
-  background-color: #2b2b2b;
-  color: #ffffff;
-}
-[data-theme="dark"] .win11-select:hover {
-  background-color: #343434;
-}
-[data-theme="light"] .win11-select {
-  background-color: #ffffff;
-  color: #1c1c1c;
-}
-[data-theme="light"] .win11-select option {
-  background-color: #ffffff;
-  color: #1c1c1c;
-}
-
 /* Win11 Range Slider */
 .slider-group {
   display: flex;
@@ -1126,6 +1102,565 @@ body, html {
 }
 
 /* ==========================================================================
+   Top Application Navigation Menu Bar (Math-Studio File Edit View Windows)
+   ========================================================================== */
+.app-top-menubar {
+  height: 38px;
+  width: 100vw;
+  background: var(--win-sidebar-bg);
+  border-bottom: 1px solid var(--win-border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 6px 0 10px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2000;
+  backdrop-filter: blur(25px);
+  user-select: none;
+}
+[data-theme="light"] .app-top-menubar {
+  background: #f0f0f0;
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+
+.menubar-left {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.menubar-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
+
+.menubar-right {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.menu-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 32px;
+}
+
+.menu-label {
+  padding: 5px 10px;
+  border-radius: var(--win-radius-sm);
+  font-size: 12.5px;
+  color: var(--win-text-primary);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.menu-label:hover,
+.menu-item.open .menu-label {
+  background: var(--win-card-bg-hover);
+  color: #ffffff;
+}
+[data-theme="light"] .menu-label:hover,
+[data-theme="light"] .menu-item.open .menu-label {
+  background: rgba(0, 0, 0, 0.06);
+  color: #000;
+}
+
+.menu-label.brand {
+  font-weight: 600;
+  gap: 7px;
+  margin-right: 4px;
+}
+
+.brand-m-mini {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: linear-gradient(135deg, #0078d4, #005a9e);
+  color: #fff;
+  border-radius: 5px;
+  font-family: 'Times New Roman', Georgia, serif;
+  font-size: 13px;
+  font-weight: bold;
+  box-shadow: 0 2px 6px rgba(0, 120, 212, 0.4);
+}
+
+/* Dropdown Menu styling */
+.menu-dropdown {
+  display: none;
+  position: absolute;
+  top: 34px;
+  left: 0;
+  min-width: 230px;
+  background: rgba(36, 36, 36, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--win-radius-md);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(20px);
+  padding: 5px;
+  z-index: 2500;
+  animation: menuDropIn 0.12s ease-out;
+}
+[data-theme="light"] .menu-dropdown {
+  background: rgba(250, 250, 250, 0.98);
+  border-color: rgba(0, 0, 0, 0.12);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+}
+
+@keyframes menuDropIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.menu-item.open .menu-dropdown {
+  display: block;
+}
+
+.menu-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6.5px 14px;
+  font-size: 12.5px;
+  border-radius: var(--win-radius-sm);
+  cursor: pointer;
+  color: var(--win-text-primary);
+  transition: background 0.1s ease;
+  position: relative;
+  letter-spacing: 0.1px;
+}
+.menu-option:hover {
+  background: var(--win-accent);
+  color: #ffffff !important;
+}
+.menu-option:hover .opt-shortcut {
+  color: #ffffff;
+  opacity: 0.85;
+}
+
+.opt-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.opt-label {
+  white-space: nowrap;
+}
+.opt-shortcut {
+  font-size: 11px;
+  opacity: 0.6;
+  font-family: var(--win-font-mono);
+  margin-left: 18px;
+  white-space: nowrap;
+}
+.opt-arrow {
+  font-size: 9px;
+  opacity: 0.6;
+  margin-left: 12px;
+}
+
+.menu-divider {
+  height: 1px;
+  background: var(--win-border-subtle);
+  margin: 5px 6px;
+}
+
+/* Sub-dropdown flyout */
+.menu-sub-dropdown {
+  display: none;
+  position: absolute;
+  top: -4px;
+  left: 100%;
+  min-width: 220px;
+  background: rgba(36, 36, 36, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--win-radius-md);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(20px);
+  padding: 5px;
+  z-index: 2600;
+  animation: menuDropIn 0.12s ease-out;
+}
+[data-theme="light"] .menu-sub-dropdown {
+  background: rgba(250, 250, 250, 0.98);
+  border-color: rgba(0, 0, 0, 0.12);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+}
+
+.menu-option.has-submenu:hover > .menu-sub-dropdown {
+  display: block;
+}
+
+/* Current project indicator pill */
+.current-project-pill {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--win-border-subtle);
+  border-radius: 14px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.current-project-pill:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+[data-theme="light"] .current-project-pill {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+.project-pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #00ff88;
+  box-shadow: 0 0 6px rgba(0, 255, 136, 0.6);
+}
+
+/* Tool buttons & window control buttons */
+.menu-tool-btn {
+  width: 32px;
+  height: 28px;
+  border-radius: var(--win-radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--win-text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  transition: all 0.12s ease;
+}
+.menu-tool-btn svg {
+  display: block;
+}
+.menu-tool-btn:hover {
+  background: var(--win-card-bg-hover);
+  color: #fff;
+}
+[data-theme="light"] .menu-tool-btn:hover {
+  background: rgba(0, 0, 0, 0.07);
+  color: #000;
+}
+
+.theme-icon-svg {
+  display: block;
+  color: currentColor;
+  transition: transform 0.25s ease;
+}
+.menu-tool-btn:hover .theme-icon-svg,
+.hud-btn:hover .theme-icon-svg {
+  transform: rotate(20deg);
+}
+
+.menubar-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--win-border-subtle);
+  margin: 0 4px;
+}
+
+.menu-window-control-btn {
+  width: 44px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--win-text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  transition: all 0.1s;
+}
+.menu-window-control-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+.menu-window-control-btn.close:hover {
+  background: #e81123 !important;
+  color: #ffffff !important;
+}
+
+/* App Main Viewport below Top Menubar */
+.app-main-viewport {
+  position: absolute;
+  top: 38px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+}
+
+.app-main-viewport .app-page {
+  width: 100%;
+  height: 100%;
+}
+
+.app-main-viewport .app-container {
+  width: 100%;
+  height: 100%;
+}
+
+/* Focus 3D Mode (100% full screen 3D canvas) */
+body.focus-3d .sidebar,
+body.focus-3d .content-pane {
+  display: none !important;
+}
+body.focus-3d .viewport-pane {
+  flex: 1 1 100% !important;
+  max-width: 100vw !important;
+  width: 100vw !important;
+}
+
+/* Rich Dialog Windows (About, Help, Report, Version) */
+.rich-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+  backdrop-filter: blur(8px);
+  animation: fadeIn 0.15s ease-out;
+}
+.rich-modal-box {
+  width: 580px;
+  max-width: 92vw;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  background: #242424;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--win-radius-lg);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+[data-theme="light"] .rich-modal-box {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.12);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.16);
+}
+
+.rich-modal-header {
+  padding: 18px 22px 14px 22px;
+  border-bottom: 1px solid var(--win-border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.rich-modal-title {
+  font-size: 17px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.rich-modal-close {
+  background: transparent;
+  border: none;
+  color: var(--win-text-secondary);
+  font-size: 16px;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--win-radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rich-modal-close:hover {
+  background: var(--win-card-bg-hover);
+  color: #fff;
+}
+
+.rich-modal-body {
+  padding: 20px 22px;
+  overflow-y: auto;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.rich-modal-footer {
+  padding: 14px 22px;
+  border-top: 1px solid var(--win-border-subtle);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  background: rgba(0, 0, 0, 0.08);
+}
+
+/* ==========================================================================
+   Blender-style collapsible panel management
+   ========================================================================== */
+.panel {
+  position: relative;
+}
+
+/* Small tools cluster (collapse chevron + type dropdown) in the top-left */
+.panel-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  flex: none;
+  margin-right: 2px;
+  align-self: center;
+}
+
+.panel-chevron {
+  cursor: pointer;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--win-text-secondary);
+  padding: 3px 3px;
+  border-radius: 3px;
+  user-select: none;
+  transition: transform 0.15s ease, background 0.12s ease, color 0.12s ease;
+}
+.panel-chevron:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--win-text-primary);
+}
+.panel.collapsed .panel-chevron {
+  transform: rotate(-90deg);
+}
+
+.panel-type-btn {
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--win-text-secondary);
+  padding: 2px 4px;
+  border-radius: 3px;
+  background: transparent;
+  border: none;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.panel-type-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--win-text-primary);
+}
+
+/* Collapsed card: hide description and control, keep the title/icon */
+.panel.collapsed .card-control,
+.panel.collapsed .card-desc {
+  display: none !important;
+}
+
+/* Collapsed expander (keyframe composite editor): hide its body */
+.panel.collapsed .expander-content {
+  display: none !important;
+}
+
+/* ---- Panel types (visual styles) ---- */
+.panel.panel-accent {
+  border-color: rgba(0, 120, 212, 0.55);
+  background: rgba(0, 120, 212, 0.07);
+}
+[data-theme="light"] .panel.panel-accent {
+  background: rgba(0, 103, 192, 0.06);
+}
+
+.panel.panel-compact {
+  padding: 8px 12px;
+}
+.panel.panel-compact .card-icon {
+  width: 22px;
+}
+
+.panel.panel-floating {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+[data-theme="light"] .panel.panel-floating {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+
+/* ---- Panel management dropdown menu ---- */
+.panel-menu {
+  position: fixed;
+  z-index: 3000;
+  min-width: 172px;
+  background: #262626;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  padding: 6px;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.55);
+  font-size: 12px;
+  color: var(--win-text-primary);
+  animation: fadeIn 0.1s ease-out;
+}
+[data-theme="light"] .panel-menu {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.12);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+}
+
+.panel-menu-title {
+  font-weight: 600;
+  padding: 4px 9px 3px;
+  color: var(--win-text-secondary);
+  font-size: 11px;
+  letter-spacing: 0.3px;
+}
+
+.panel-menu-label {
+  padding: 4px 9px 1px;
+  color: var(--win-text-tertiary);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.panel-menu-item {
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  white-space: nowrap;
+}
+.panel-menu-item:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+[data-theme="light"] .panel-menu-item:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+.panel-menu-item.active {
+  color: var(--win-accent);
+}
+.panel-menu-item.active::after {
+  content: '✓';
+  font-weight: 600;
+}
+
+.panel-menu-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.09);
+  margin: 4px 2px;
+}
+[data-theme="light"] .panel-menu-divider {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+/* ==========================================================================
    Resizable workspace splitters
    ========================================================================== */
 .splitter {
@@ -1181,12 +1716,6 @@ body, html {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.timeline-tool-label {
-  font-size: 12px;
-  color: var(--win-text-secondary);
-  white-space: nowrap;
 }
 
 .timeline-canvas-wrap {
@@ -1285,3 +1814,27 @@ body, html {
   cursor: pointer;
   user-select: none;
 }
+
+/* ==========================================================================
+   Dark-mode dropdown (select) backgrounds: gray so they contrast with text
+   ========================================================================== */
+[data-theme="dark"] .win11-select {
+  background-color: #2b2b2b;
+  color: #ffffff;
+}
+[data-theme="dark"] .win11-select option {
+  background-color: #2b2b2b;
+  color: #ffffff;
+}
+[data-theme="dark"] .win11-select:hover {
+  background-color: #343434;
+}
+[data-theme="light"] .win11-select {
+  background-color: #ffffff;
+  color: #1c1c1c;
+}
+[data-theme="light"] .win11-select option {
+  background-color: #ffffff;
+  color: #1c1c1c;
+}
+
