@@ -113,6 +113,32 @@ export class PresetsManager {
         yRange: [-4, 4],
         defaultParams: {},
         description: '经典双曲鞍点与主曲率分析曲面'
+      },
+      {
+        id: 'enneper_surface',
+        name: '恩内佩尔极小曲面 (Enneper Surface)',
+        category: '微分几何',
+        type: 'parametric_surface',
+        exprX: 'u - (u^3)/3 + u * v^2',
+        exprY: 'v - (v^3)/3 + v * u^2',
+        exprZ: 'u^2 - v^2',
+        uRange: [-1.6, 1.6],
+        vRange: [-1.6, 1.6],
+        defaultParams: {},
+        description: '经典的自相交三维极小曲面，平均曲率处处为零'
+      },
+      {
+        id: 'klein_bottle',
+        name: '克莱因瓶 8字形浸入 (Klein Bottle)',
+        category: '微分几何',
+        type: 'parametric_surface',
+        exprX: '(2.5 + cos(u/2) * sin(v) - sin(u/2) * sin(2*v)) * cos(u)',
+        exprY: '(2.5 + cos(u/2) * sin(v) - sin(u/2) * sin(2*v)) * sin(u)',
+        exprZ: 'sin(u/2) * sin(v) + cos(u/2) * sin(2*v)',
+        uRange: [0, 6.28318],
+        vRange: [0, 6.28318],
+        defaultParams: {},
+        description: '拓扑无定向封闭四维曲面在三维欧氏空间中的经典浸入模型'
       }
     ];
 

@@ -1,7 +1,7 @@
 """
 Packaging script for 'Math Studio.exe' using PyInstaller.
 Builds a standalone executable containing the full Windows 11 Fluent UI, SymPy engine, and FFmpeg pipeline,
-equipped with the serif uppercase 'M' application icon.
+equipped with the rounded Math Studio application icon.
 """
 
 import os
@@ -28,9 +28,10 @@ def build():
                 print(f"Notice: {e}")
 
     # 1. Regenerate icon if needed
-    if not os.path.exists("app_icon.ico"):
-        print("Generating serif M icon...")
-        subprocess.run([sys.executable, "generate_icon.py"])
+    if not all(os.path.isfile(path) for path in ("app_icon.ico", "app_icon.png")):
+        print("Generating the rounded Math Studio icon...")
+        if subprocess.run([sys.executable, "generate_icon.py"]).returncode:
+            return False
 
     print("=== Step 1: Rebuilding frontend assets ===")
     res = subprocess.run(
@@ -79,7 +80,7 @@ def build():
         size_mb = round(os.path.getsize(target_exe) / (1024 * 1024), 2)
         print(f"\n==================================================")
         print(f" SUCCESS! Generated: {target_exe} ({size_mb} MB)")
-        print(f" Icon: Uppercase serif 'M' embedded")
+        print(f" Icon: rounded Math Studio artwork embedded")
         print(f"==================================================")
         return True
     else:

@@ -1,0 +1,71 @@
+.node-scroll {
+  position: relative;
+  overflow: hidden;
+  touch-action: none;
+  background-image: radial-gradient(var(--workspace-divider) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+.node-scroll:focus-visible {
+  outline: 1px solid #8bb9ee;
+  outline-offset: -1px;
+}
+
+.node-board {
+  position: absolute;
+  inset: 0;
+  transform-origin: top left;
+  background: none;
+}
+
+.node-links { overflow: visible; }
+.node-scroll.panning, .node-scroll.panning * { cursor: grabbing; }
+
+.node-box-select {
+  position: absolute;
+  z-index: 2;
+  border: 1px solid #8bb9ee;
+  background: #8bb9ee25;
+  pointer-events: none;
+}
+
+.node-menu {
+  position: fixed;
+  z-index: 5000;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 280px;
+  min-height: 199px;
+  max-width: calc(100vw - 8px);
+  max-height: calc(100vh - 8px);
+  overflow: auto;
+  border: 1px solid var(--workspace-border);
+  border-radius: 6px;
+  background: var(--workspace-panel);
+  box-shadow: 0 6px 20px #0007;
+}
+
+.node-menu[hidden] { display: none; }
+
+.node-menu-categories,
+.node-menu-items {
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+}
+
+.node-menu-categories { border-right: 1px solid var(--workspace-divider); }
+
+.node-menu-row {
+  min-height: 27px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 3px;
+  color: var(--win-text-primary);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.node-menu-row:is(:hover, :focus-visible, [aria-expanded="true"]) { background: var(--workspace-selected); }
+.node-menu-categories .node-menu-row::after { content: '›'; margin-left: 10px; float: right; }

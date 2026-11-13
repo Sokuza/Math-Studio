@@ -31,8 +31,10 @@ async function build() {
   console.log("✓ Copied index.html");
 
   // 3. Copy Styles
-  fs.copyFileSync('src/styles/win11_settings.css', 'web_dist/styles/win11_settings.css');
-  console.log("✓ Copied win11_settings.css");
+  for (const stylesheet of ['win11_settings.css', 'math_nodes.css']) {
+    fs.copyFileSync(path.join('src', 'styles', stylesheet), path.join('web_dist', 'styles', stylesheet));
+    console.log(`✓ Copied ${stylesheet}`);
+  }
 
   // 4. Copy Icons
   if (fs.existsSync('app_icon.png')) {

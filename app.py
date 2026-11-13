@@ -10,6 +10,7 @@ import time
 import base64
 import subprocess
 import threading
+import tempfile
 import webview
 
 def get_asset_path(relative_path: str) -> str:
@@ -27,6 +28,15 @@ class NativeMathApi:
         self.presets_file = os.path.join(os.path.expanduser("~"), ".math_function_presets.json")
         self.projects_dir = os.path.join(os.path.expanduser("~"), "MathStudio", "Projects")
         self.layout_file = os.path.join(os.path.expanduser("~"), ".math_studio_layout.json")
+        self.preferences_file = os.path.join(os.path.expanduser("~"), ".math_studio_preferences.json")
+        self._language = "zh-CN"
+        try:
+            with open(self.preferences_file, encoding="utf-8") as preferences:
+                value = json.load(preferences).get("language")
+            if value in ("zh-CN", "en"):
+                self._language = value
+        except (OSError, ValueError, AttributeError):
+            pass
         self._window = None
 
     @property
@@ -45,6 +55,39 @@ class NativeMathApi:
 
     def set_window(self, win):
         self._window = win
+
+    def load_language(self):
+        return self._language
+
+    def save_language(self, language):
+        if language not in ("zh-CN", "en"):
+            return False
+
+        temp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=os.path.dirname(self.preferences_file),
+                prefix=".math_studio_preferences_", delete=False,
+            ) as temp:
+                temp_path = temp.name
+                json.dump({"language": language}, temp)
+            os.replace(temp_path, self.preferences_file)
+            self._language = language
+            return True
+        except OSError as error:
+            print("Error saving interface language:", error)
+            return False
+        finally:
+            if temp_path:
+                try:
+                    os.unlink(temp_path)
+                except OSError:
+                    pass
+
+    def _project_file_types(self):
+        if self._language == "en":
+            return ("Math Studio Projects (*.mathstudio.json)", "All Files (*.*)")
+        return ("Math Studio 项目 (*.mathstudio.json)", "所有文件 (*.*)")
 
     # --- Workspace Layout Persistence ---
     def load_layout(self):
@@ -141,7 +184,7 @@ class NativeMathApi:
             result = self._window.create_file_dialog(
                 webview.OPEN_DIALOG,
                 directory=directory,
-                file_types=("MathStudio 项目 (*.mathstudio.json)", "所有文件 (*.*)")
+                file_types=self._project_file_types()
             )
             path = result[0] if isinstance(result, (list, tuple)) else str(result)
             if not path:
@@ -173,7 +216,7 @@ class NativeMathApi:
                     webview.SAVE_DIALOG,
                     directory=directory,
                     save_filename=default_name,
-                    file_types=("MathStudio 项目 (*.mathstudio.json)", "所有文件 (*.*)")
+                    file_types=self._project_file_types()
                 )
                 target = result[0] if isinstance(result, (list, tuple)) else str(result)
                 if not target:
@@ -236,6 +279,9 @@ class NativeMathApi:
 
     def finish_video_render(self):
         return self.exporter.finish_recording()
+
+    def cancel_video_render(self):
+        return self.exporter.cancel_recording()
 
     def convert_webm_data(self, b64_webm: str, output_path: str):
         """Directly convert recorded WebM data from frontend to pristine MP4."""
@@ -334,14 +380,17 @@ def main():
         if not os.path.exists(html_path):
             html_path = get_asset_path(os.path.join("src", "index.html"))
 
+    from pathlib import Path
+    html_uri = Path(html_path).resolve().as_uri()
+
     window = webview.create_window(
-        title="Math Studio - Windows 11 Fluent Edition",
-        url=f"file://{os.path.normpath(html_path)}",
+        title="Math Studio",
+        url=html_uri,
         js_api=api,
         width=1380,
         height=880,
         min_size=(1020, 680),
-        background_color='#1f1f1f',
+        background_color='#1a1a1a',
         text_select=True,
         zoomable=True,
         fullscreen=True  # 启动后为全屏模式
@@ -358,7 +407,7 @@ def main():
 
     threading.Thread(target=_prewarm_background, daemon=True).start()
 
-    webview.start(debug=False, gui='edgechromium')
+    webview.start(debug=False, gui='edgechromium', icon=get_asset_path('app_icon.ico'))
 
 if __name__ == "__main__":
     main()

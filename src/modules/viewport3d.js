@@ -1,35 +1,38 @@
 /**
- * 3D Vector Viewport Module using Three.js.
- * Handles interactive 3D rendering, explicit surfaces, parametric curves/surfaces,
- * vector fields, coordinate axes, calculus overlays (tangent planes, gradients), and Fourier epicycles.
+ * 3D Vector Viewport Module using Three.js (High-Performance Fluent Edition).
+ * Handles real-time WebGL rendering with zero-allocation buffer reuse,
+ * explicit surfaces, parametric curves/surfaces, vector fields, coordinate axes,
+ * interactive raycasting inspection, calculus overlays (tangent planes, gradients, Riemann sum boxes),
+ * and Fourier epicycles.
  */
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { ViewportGuides } from './viewport_guides.js';
+import { PropertyShading, derivativeStencils, sampleSurfaceProperty, sampleCurveProperty } from './property_shading.js';
 
 export class Viewport3D {
   constructor(containerId) {
     this.container = document.getElementById(containerId);
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x181818);
+    this.scene.background = new THREE.Color(0x060606);
 
-    // Camera. Guard against a zero-sized (hidden) container which would otherwise
-    // produce a NaN aspect ratio and break the initial projection matrix.
-    const cw = this.container.clientWidth || 1;
-    const ch = this.container.clientHeight || 1;
+    // Camera. Guard against zero-sized container to avoid NaN projection matrix
+    const cw = Math.max(this.container.clientWidth || 1, 100);
+    const ch = Math.max(this.container.clientHeight || 1, 100);
     this.camera = new THREE.PerspectiveCamera(45, cw / ch, 0.1, 1000);
     this.camera.position.set(12, 12, 14);
     this.cameraTarget = new THREE.Vector3(0, 0, 0);
     this.camera.lookAt(this.cameraTarget);
 
-    // Renderer
+    // High performance WebGL Renderer
     this.renderer = new THREE.WebGLRenderer({
       antialias: true,
       preserveDrawingBuffer: true,
       powerPreference: "high-performance"
     });
     this.renderer.setSize(cw, ch);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.shadowMap.enabled = true;
     this.container.appendChild(this.renderer.domElement);
 
@@ -41,20 +44,44 @@ export class Viewport3D {
     this.controls.screenSpacePanning = true;
     this.controls.minDistance = 2;
     this.controls.maxDistance = 200;
+    this.controls.minZoom = 0.25;
+    this.controls.maxZoom = 2.5;
     this.controls.target.copy(this.cameraTarget);
     this.autoRotate = false;
 
     // Lighting
     this.setupLighting();
 
-    // Coordinate System & Helpers
-    this.axisGroup = new THREE.Group();
-    this.gridHelper = null;
-    this.setupCoordinateSystem();
-
-    // Plot Objects Group
+    this.guides = new ViewportGuides(this.scene);
+    this.shading = new PropertyShading();
+    this.renderHeight = ch;
     this.plotGroup = new THREE.Group();
     this.scene.add(this.plotGroup);
+    this.geometryCounts = { points: 0, edges: 0, faces: 0 };
+    this.surfaceCache = null;
+    this.plotMesh = null;
+    this.wire = null;
+    this.heatmapMaterial = new THREE.MeshBasicMaterial({
+      vertexColors: true,
+      side: THREE.DoubleSide,
+      polygonOffset: true,
+      polygonOffsetFactor: 1,
+      polygonOffsetUnits: 1,
+      toneMapped: false
+    });
+    this.solidMaterial = new THREE.MeshStandardMaterial({
+      color: 0xaeb5c0,
+      side: THREE.DoubleSide,
+      roughness: 0.48,
+      polygonOffset: true,
+      polygonOffsetFactor: 1,
+      polygonOffsetUnits: 1
+    });
+    this.wireMaterial = new THREE.LineBasicMaterial({
+      color: 0xe2e6eb,
+      transparent: true,
+      depthWrite: false
+    });
 
     // Calculus Visualizations Group (Tangent plane, Gradient arrows, Integral volume)
     this.calculusGroup = new THREE.Group();
@@ -66,20 +93,27 @@ export class Viewport3D {
 
     // Rendering Options
     this.options = {
-      wireframe: false,
-      colorMap: 'coolwarm', // 'viridis', 'plasma', 'coolwarm', 'rainbow', 'neon'
-      showAxes: true,
-      showGrid: true,
       showTangentPlane: false,
       showGradientField: false,
       showIntegralVolume: false,
-      tangentPoint: { x: 0, y: 0 },
+      tangentPoint: { x: 1.0, y: 1.0 },
       isOrthographic: false
     };
 
+    this.setProjection('orthographic');
+
+    // Raycaster for surface picking and inspection
+    this.raycaster = new THREE.Raycaster();
+    this.mouse = new THREE.Vector2();
+    this.onCursorPlaced = null;
+    this.onSurfacePicked = null; // callback(x, y, z)
+    this.bindRaycaster();
+
     // Resize Observer
     window.addEventListener('resize', () => this.onWindowResize());
-    new ResizeObserver(() => this.onWindowResize()).observe(this.container);
+    if (window.ResizeObserver) {
+      new ResizeObserver(() => this.onWindowResize()).observe(this.container);
+    }
 
     // Animation Loop
     this.animate = this.animate.bind(this);
@@ -99,36 +133,38 @@ export class Viewport3D {
     this.scene.add(dirLight2);
   }
 
-  setupCoordinateSystem() {
-    this.scene.remove(this.axisGroup);
-    this.axisGroup = new THREE.Group();
+  bindRaycaster() {
+    let downX = 0, downY = 0;
+    this.container.addEventListener('pointerdown', (e) => {
+      downX = e.clientX;
+      downY = e.clientY;
+    });
 
-    // Ground Grid
-    this.gridHelper = new THREE.GridHelper(20, 20, 0x0078d4, 0x333333);
-    this.gridHelper.position.y = 0;
-    this.axisGroup.add(this.gridHelper);
+    this.container.addEventListener('pointerup', (e) => {
+      // Only treat as pick if mouse barely moved (click, not orbit drag)
+      if (Math.abs(e.clientX - downX) > 4 || Math.abs(e.clientY - downY) > 4) return;
 
-    // 3D Vector Axes (X = Red, Y = Green, Z = Blue)
-    const axisLen = 10;
-    const arrowRadius = 0.2;
-    const arrowHeadLen = 0.8;
+      const rect = this.container.getBoundingClientRect();
+      this.mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      this.mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 
-    // X Axis (Red)
-    const xDir = new THREE.Vector3(1, 0, 0);
-    const xArrow = new THREE.ArrowHelper(xDir, new THREE.Vector3(0, 0, 0), axisLen, 0xff4d4d, arrowHeadLen, arrowRadius);
-    this.axisGroup.add(xArrow);
-
-    // Y Axis (Green / Height in Three.js or standard math Z. In math space we can map Y as vertical)
-    const yDir = new THREE.Vector3(0, 1, 0);
-    const yArrow = new THREE.ArrowHelper(yDir, new THREE.Vector3(0, 0, 0), axisLen, 0x4dff4d, arrowHeadLen, arrowRadius);
-    this.axisGroup.add(yArrow);
-
-    // Z Axis (Blue)
-    const zDir = new THREE.Vector3(0, 0, 1);
-    const zArrow = new THREE.ArrowHelper(zDir, new THREE.Vector3(0, 0, 0), axisLen, 0x4da6ff, arrowHeadLen, arrowRadius);
-    this.axisGroup.add(zArrow);
-
-    this.scene.add(this.axisGroup);
+      const placeCursor = e.button === 2 && e.shiftKey;
+      if (!placeCursor && e.button !== 0) return;
+      this.raycaster.setFromCamera(this.mouse, this.camera);
+      const hit = this.plotGroup.visible
+        ? this.raycaster.intersectObject(this.plotMesh || this.plotGroup, true)[0]
+        : null;
+      if (placeCursor) {
+        this.guides.update(this.camera, this.renderHeight);
+        const point = hit?.point || this.raycaster.ray.intersectPlane(this.guides.plane, new THREE.Vector3());
+        if (point) {
+          this.guides.setCursorPosition([point.x, point.z, point.y]);
+          this.onCursorPlaced?.();
+        }
+      } else if (hit) {
+        this.onSurfacePicked?.(hit.point.x, hit.point.z, hit.point.y);
+      }
+    });
   }
 
   onWindowResize() {
@@ -136,9 +172,62 @@ export class Viewport3D {
     const height = this.container.clientHeight;
     if (width === 0 || height === 0) return;
 
-    this.camera.aspect = width / height;
+    this.resizeRenderer(width, height);
+  }
+
+  resizeRenderer(width, height, updateStyle = true) {
+    const aspect = width / height;
+    if (this.camera.isOrthographicCamera) {
+      this.camera.left = -this.camera.top * aspect;
+      this.camera.right = this.camera.top * aspect;
+    } else {
+      this.camera.aspect = aspect;
+    }
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(width, height);
+    this.renderer.setSize(width, height, updateStyle);
+    this.renderHeight = height;
+    this.guides.update(this.camera, height);
+  }
+
+  bindViewGizmo(element) {
+    const rotation = new THREE.Quaternion();
+    const axes = [...element.querySelectorAll('[data-axis]')].map(button => {
+      const axis = new THREE.Vector3(...button.dataset.axis.split(',').map(Number));
+      const direction = axis.clone();
+      const line = document.createElement('span');
+      line.className = 'gizmo-line';
+      element.prepend(line);
+      button.addEventListener('click', () => this.resetCamera(button.dataset.cameraView));
+      return { button, line, axis, direction };
+    });
+    const update = () => {
+      rotation.copy(this.camera.quaternion).invert();
+      for (const { button, line, axis, direction } of axes) {
+        direction.copy(axis).applyQuaternion(rotation);
+        const x = direction.x * 25;
+        const y = -direction.y * 25;
+        button.style.transform = `translate(${x}px, ${y}px)`;
+        button.style.zIndex = direction.z < 0 ? '1' : '2';
+        button.style.opacity = direction.z < -0.05 ? '0.65' : '1';
+        line.style.width = `${Math.hypot(x, y)}px`;
+        line.style.transform = `rotate(${Math.atan2(y, x)}rad)`;
+      }
+    };
+    this.controls.addEventListener('change', update);
+    update();
+  }
+
+  setZoom(zoom) {
+    this.camera.zoom = THREE.MathUtils.clamp(zoom, this.controls.minZoom, this.controls.maxZoom);
+    this.camera.updateProjectionMatrix();
+  }
+
+  setGridCounts(columns, rows) {
+    this.geometryCounts = {
+      points: (columns + 1) * (rows + 1),
+      edges: 3 * columns * rows + columns + rows,
+      faces: 2 * columns * rows
+    };
   }
 
   // --- Camera Control System ---
@@ -183,7 +272,7 @@ export class Viewport3D {
 
     let newCamera;
     if (isOrtho) {
-      const extent = 16;
+      const extent = 12;
       newCamera = new THREE.OrthographicCamera(
         -extent * aspect, extent * aspect, extent, -extent, 0.1, 500
       );
@@ -191,6 +280,8 @@ export class Viewport3D {
       newCamera = new THREE.PerspectiveCamera(45, aspect, 0.1, 1000);
     }
     newCamera.position.copy(position);
+    newCamera.zoom = this.camera.zoom;
+    newCamera.updateProjectionMatrix();
     this.camera = newCamera;
     this.camera.lookAt(target);
     this.options.isOrthographic = isOrtho;
@@ -207,13 +298,12 @@ export class Viewport3D {
 
   frameAll() {
     const box = new THREE.Box3();
-    const target = this.controls.target;
     let found = false;
-    this.scene.traverse((obj) => {
-      if (obj.isMesh || obj.isLine || obj.isLineSegments || obj.isPoints) {
+    this.plotGroup.traverse((obj) => {
+      if (obj.isMesh || obj.isLine || obj.isLineSegments) {
         if (obj.geometry) {
-          if (!obj.geometry.boundingBox) obj.geometry.computeBoundingBox();
-          box.expandByObject(obj);
+          if (obj === this.wire) return;
+          box.expandByObject(obj, true);
           found = true;
         }
       }
@@ -225,301 +315,232 @@ export class Viewport3D {
     const sphere = box.getBoundingSphere(new THREE.Sphere());
     const center = sphere.center;
     const radius = Math.max(sphere.radius, 0.001);
-    const fov = this.camera.fov * (Math.PI / 180);
-    const dist = radius / Math.sin(fov / 2) * 1.3;
-    const dir = this.camera.position.clone().sub(target).normalize();
+    const fov = (this.camera.fov || 45) * (Math.PI / 180);
+    const dist = radius / Math.sin(fov / 2) * 1.35;
+    if (this.camera.isOrthographicCamera) {
+      const halfSpan = Math.min(this.camera.top, this.camera.right);
+      this.setZoom(halfSpan / (radius * 1.35));
+    }
+    const dir = this.camera.position.clone().sub(this.controls.target).normalize();
     this.controls.target.copy(center);
     this.camera.position.copy(center.clone().add(dir.multiplyScalar(dist)));
     this.camera.lookAt(center);
     this.controls.update();
   }
 
-  // --- Colormap Helper ---
-  getColor(t, mapName = 'coolwarm') {
-    // t normalized in [0, 1]
-    const clampedT = Math.max(0, Math.min(1, t));
-    const color = new THREE.Color();
-
-    if (mapName === 'coolwarm') {
-      // Blue (0) -> White (0.5) -> Red (1)
-      if (clampedT < 0.5) {
-        const s = clampedT * 2;
-        color.setRGB(0.2 + 0.8 * s, 0.4 + 0.6 * s, 1.0);
-      } else {
-        const s = (clampedT - 0.5) * 2;
-        color.setRGB(1.0, 1.0 - 0.6 * s, 1.0 - 0.8 * s);
-      }
-    } else if (mapName === 'viridis') {
-      // Purple -> Teal -> Yellow
-      color.setHSL(0.75 - clampedT * 0.6, 0.9, 0.2 + clampedT * 0.6);
-    } else if (mapName === 'plasma') {
-      // Dark Blue -> Pink -> Orange -> Yellow
-      color.setHSL(0.8 - clampedT * 0.7, 1.0, 0.2 + clampedT * 0.6);
-    } else if (mapName === 'neon') {
-      // Cyan to Magenta
-      color.setRGB(clampedT, 1.0 - clampedT, 1.0);
-    } else {
-      // Rainbow
-      color.setHSL((1 - clampedT) * 0.7, 1.0, 0.5);
-    }
-    return color;
-  }
-
-  // --- Explicit 3D Surface Rendering: z = f(x, y) ---
-  plotExplicitSurface(fn, xRange = [-5, 5], yRange = [-5, 5], segX = 70, segY = 70) {
+  getSurface(type, columns, rows) {
+    const previous = this.surfaceCache;
+    if (previous?.type === type && previous.columns === columns && previous.rows === rows) return previous;
     this.clearPlot();
-
+    const count = (columns + 1) * (rows + 1);
     const geometry = new THREE.BufferGeometry();
-    const positions = [];
-    const colors = [];
+    const position = new THREE.BufferAttribute(new Float32Array(count * 3), 3);
+    const color = new THREE.BufferAttribute(new Float32Array(count * 3), 3);
+    geometry.setAttribute('position', position.setUsage(THREE.DynamicDrawUsage));
+    geometry.setAttribute('color', color.setUsage(THREE.DynamicDrawUsage));
     const indices = [];
-
-    const dx = (xRange[1] - xRange[0]) / segX;
-    const dy = (yRange[1] - yRange[0]) / segY;
-
-    // Track min/max z for normalization
-    let minZ = Infinity;
-    let maxZ = -Infinity;
-    const zValues = [];
-
-    for (let j = 0; j <= segY; j++) {
-      const y = yRange[0] + j * dy;
-      for (let i = 0; i <= segX; i++) {
-        const x = xRange[0] + i * dx;
-        let z = 0;
-        try {
-          z = fn(x, y);
-          if (isNaN(z) || !isFinite(z)) z = 0;
-        } catch (e) {
-          z = 0;
-        }
-        // In 3D space: Math x -> 3D X, Math y -> 3D Z, Math z -> 3D Y (elevation)
-        positions.push(x, z, y);
-        zValues.push(z);
-        if (z < minZ) minZ = z;
-        if (z > maxZ) maxZ = z;
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < columns; col++) {
+        const a = row * (columns + 1) + col;
+        const c = a + columns + 1;
+        indices.push(a, c, a + 1, a + 1, c, c + 1);
       }
     }
-
-    const zSpan = (maxZ - minZ) || 1;
-    for (let k = 0; k < zValues.length; k++) {
-      const normZ = (zValues[k] - minZ) / zSpan;
-      const col = this.getColor(normZ, this.options.colorMap);
-      colors.push(col.r, col.g, col.b);
-    }
-
-    // Indices for grid quads
-    for (let j = 0; j < segY; j++) {
-      for (let i = 0; i < segX; i++) {
-        const a = j * (segX + 1) + i;
-        const b = a + 1;
-        const c = a + (segX + 1);
-        const d = c + 1;
-        // Two triangles
-        indices.push(a, c, b);
-        indices.push(b, c, d);
-      }
-    }
-
     geometry.setIndex(indices);
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-    geometry.computeVertexNormals();
+    this.setGridCounts(columns, rows);
+    this.addPlotMesh(geometry);
+    this.surfaceCache = {
+      type, columns, rows, geometry, position, color,
+      samples: new Float64Array(count * 3),
+      valid: new Uint8Array(count),
+      values: new Float64Array(count),
+      uStencils: derivativeStencils(columns),
+      vStencils: derivativeStencils(rows)
+    };
+    return this.surfaceCache;
+  }
 
-    const material = new THREE.MeshStandardMaterial({
-      vertexColors: true,
-      side: THREE.DoubleSide,
-      wireframe: this.options.wireframe,
-      roughness: 0.35,
-      metalness: 0.15
-    });
+  addPlotMesh(geometry) {
+    this.plotMesh = new THREE.Mesh(geometry, this.heatmapMaterial);
+    this.plotGroup.add(this.plotMesh);
+    this.syncWireframe();
+  }
 
-    const mesh = new THREE.Mesh(geometry, material);
-    this.plotGroup.add(mesh);
+  syncWireframe() {
+    if (!this.plotMesh) return;
+    const { enabled, wireMode, wireOpacity } = this.guides.settings;
+    const only = wireMode === 'only';
+    const showWire = only || (wireMode === 'overlay' && enabled);
+    this.plotMesh.visible = !only;
+    if (showWire && !this.wire) {
+      const source = this.plotMesh.geometry;
+      const indices = source.index.array;
+      const vertexCount = source.attributes.position.count;
+      const edges = new Set();
+      const lineIndices = [];
+      for (let i = 0; i < indices.length; i += 3) {
+        for (let j = 0; j < 3; j++) {
+          const a = indices[i + j];
+          const b = indices[i + (j + 1) % 3];
+          const edge = Math.min(a, b) * vertexCount + Math.max(a, b);
+          if (edges.has(edge)) continue;
+          edges.add(edge);
+          lineIndices.push(a, b);
+        }
+      }
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', source.attributes.position);
+      geometry.setIndex(lineIndices);
+      this.wire = new THREE.LineSegments(geometry, this.wireMaterial);
+      this.wire.frustumCulled = false;
+      this.wire.renderOrder = 3;
+      this.plotGroup.add(this.wire);
+    }
+    if (this.wire) this.wire.visible = showWire;
+    this.wireMaterial.opacity = only ? 1 : wireOpacity;
+  }
 
-    // Optional vector wireframe overlay
-    if (!this.options.wireframe) {
-      const wireGeo = new THREE.WireframeGeometry(geometry);
-      const wireMat = new THREE.LineBasicMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0.08
-      });
-      const wireMesh = new THREE.LineSegments(wireGeo, wireMat);
-      this.plotGroup.add(wireMesh);
+  finishSurface(cache, metric) {
+    const { geometry, samples, position, values, color } = cache;
+    position.array.set(samples);
+    position.needsUpdate = true;
+    geometry.computeBoundingSphere();
+    this.plotMesh.material = metric === 'solid' ? this.solidMaterial : this.heatmapMaterial;
+    if (metric === 'solid') {
+      geometry.computeVertexNormals();
+    } else {
+      sampleSurfaceProperty(cache, metric);
+      this.shading.paint(values, color);
     }
   }
 
-  // --- 3D Space Curve Rendering: (x(u), y(u), z(u)) ---
-  plotParametricCurve(fn, uRange = [0, 20], samples = 400) {
+  plotExplicitSurface(fn, xRange, yRange, columns, rows, metric) {
+    const cache = this.getSurface('explicit', columns, rows);
+    const dx = (xRange[1] - xRange[0]) / columns;
+    const dy = (yRange[1] - yRange[0]) / rows;
+    let index = 0;
+    for (let row = 0; row <= rows; row++) {
+      const y = yRange[0] + row * dy;
+      for (let col = 0; col <= columns; col++, index++) {
+        const x = xRange[0] + col * dx;
+        let z = NaN;
+        try { z = fn(x, y); } catch {}
+        const finite = Number.isFinite(Math.fround(z));
+        cache.valid[index] = finite ? 1 : 0;
+        cache.samples[index * 3] = x;
+        cache.samples[index * 3 + 1] = finite ? z : 0;
+        cache.samples[index * 3 + 2] = y;
+      }
+    }
+    this.finishSurface(cache, metric);
+  }
+
+  plotParametricSurface(fn, uRange, vRange, columns, rows, metric) {
+    const cache = this.getSurface('parametric_surface', columns, rows);
+    const du = (uRange[1] - uRange[0]) / columns;
+    const dv = (vRange[1] - vRange[0]) / rows;
+    let index = 0;
+    for (let row = 0; row <= rows; row++) {
+      const v = vRange[0] + row * dv;
+      for (let col = 0; col <= columns; col++, index++) {
+        let point;
+        try { point = fn(uRange[0] + col * du, v); } catch {}
+        const valid = point && Number.isFinite(point.x) && Number.isFinite(point.y) && Number.isFinite(point.z);
+        cache.valid[index] = valid ? 1 : 0;
+        cache.samples[index * 3] = valid ? point.x : 0;
+        cache.samples[index * 3 + 1] = valid ? point.z : 0;
+        cache.samples[index * 3 + 2] = valid ? point.y : 0;
+      }
+    }
+    this.finishSurface(cache, metric);
+  }
+
+  plotParametricCurve(fn, uRange, segments, metric) {
     this.clearPlot();
-
     const points = [];
-    const colors = [];
-    const du = (uRange[1] - uRange[0]) / samples;
-
-    for (let i = 0; i <= samples; i++) {
-      const u = uRange[0] + i * du;
-      try {
-        const pt = fn(u);
-        const px = isFinite(pt.x) ? pt.x : 0;
-        const py = isFinite(pt.y) ? pt.y : 0;
-        const pz = isFinite(pt.z) ? pt.z : 0;
-        // Map: x -> X, z -> Y (elevation), y -> Z
-        points.push(new THREE.Vector3(px, pz, py));
-        const col = this.getColor(i / samples, this.options.colorMap);
-        colors.push(col.r, col.g, col.b);
-      } catch (e) {}
+    const du = (uRange[1] - uRange[0]) / segments;
+    for (let i = 0; i <= segments; i++) {
+      let point;
+      try { point = fn(uRange[0] + i * du); } catch {}
+      if (point && Number.isFinite(point.x) && Number.isFinite(point.y) && Number.isFinite(point.z)) {
+        points.push(new THREE.Vector3(point.x, point.z, point.y));
+      }
+    }
+    if (points.length < 2) {
+      this.shading.measure([]);
+      return;
     }
 
-    if (points.length < 2) return;
-
-    // Tube Geometry for vector 3D look
     const curve = new THREE.CatmullRomCurve3(points);
-    const tubeGeo = new THREE.TubeGeometry(curve, samples, 0.08, 12, false);
-    
-    // Assign vertex colors to tube
-    const tubeColors = [];
-    const count = tubeGeo.attributes.position.count;
-    for (let k = 0; k < count; k++) {
-      const uRatio = k / count;
-      const col = this.getColor(uRatio, this.options.colorMap);
-      tubeColors.push(col.r, col.g, col.b);
+    const radialSegments = 10;
+    const geometry = new THREE.TubeGeometry(curve, segments, 0.08, radialSegments, false);
+    this.setGridCounts(segments, radialSegments);
+    this.addPlotMesh(geometry);
+    if (metric === 'solid') {
+      this.plotMesh.material = this.solidMaterial;
+    } else {
+      const values = sampleCurveProperty(curve, segments, metric);
+      const color = new THREE.BufferAttribute(new Float32Array(geometry.attributes.position.count * 3), 3);
+      this.shading.paint(values, color, radialSegments + 1);
+      geometry.setAttribute('color', color);
     }
-    tubeGeo.setAttribute('color', new THREE.Float32BufferAttribute(tubeColors, 3));
-
-    const tubeMat = new THREE.MeshStandardMaterial({
-      vertexColors: true,
-      roughness: 0.2,
-      metalness: 0.3
-    });
-
-    const tubeMesh = new THREE.Mesh(tubeGeo, tubeMat);
-    this.plotGroup.add(tubeMesh);
-
-    // Frenet Frame on dynamic point (moving tangent/normal frame)
     this.addFrenetFrame(curve, 0.5);
   }
 
   addFrenetFrame(curve, tVal = 0.5) {
-    const pt = curve.getPointAt(tVal);
-    const tangent = curve.getTangentAt(tVal).normalize();
-    
-    // Frenet Normal
-    const normal = new THREE.Vector3(0, 1, 0).cross(tangent).normalize();
-    const binormal = new THREE.Vector3().crossVectors(tangent, normal).normalize();
+    try {
+      const pt = curve.getPointAt(tVal);
+      const tangent = curve.getTangentAt(tVal).normalize();
+      const normal = new THREE.Vector3(0, 1, 0).cross(tangent).normalize();
+      const binormal = new THREE.Vector3().crossVectors(tangent, normal).normalize();
 
-    const frameGroup = new THREE.Group();
-    frameGroup.position.copy(pt);
+      const frameGroup = new THREE.Group();
+      frameGroup.position.copy(pt);
 
-    // Tangent (Red)
-    frameGroup.add(new THREE.ArrowHelper(tangent, new THREE.Vector3(0,0,0), 1.5, 0xff0055, 0.4, 0.15));
-    // Normal (Green)
-    frameGroup.add(new THREE.ArrowHelper(normal, new THREE.Vector3(0,0,0), 1.5, 0x00ff88, 0.4, 0.15));
-    // Binormal (Blue)
-    frameGroup.add(new THREE.ArrowHelper(binormal, new THREE.Vector3(0,0,0), 1.5, 0x00c6ff, 0.4, 0.15));
+      frameGroup.add(new THREE.ArrowHelper(tangent, new THREE.Vector3(0,0,0), 1.5, 0xff0055, 0.4, 0.15));
+      frameGroup.add(new THREE.ArrowHelper(normal, new THREE.Vector3(0,0,0), 1.5, 0x00ff88, 0.4, 0.15));
+      frameGroup.add(new THREE.ArrowHelper(binormal, new THREE.Vector3(0,0,0), 1.5, 0x00c6ff, 0.4, 0.15));
 
-    this.plotGroup.add(frameGroup);
+      this.plotGroup.add(frameGroup);
+    } catch (e) {}
   }
 
-  // --- 3D Parametric Surface: (x(u,v), y(u,v), z(u,v)) ---
-  plotParametricSurface(fn, uRange = [0, 6.28], vRange = [0, 6.28], segU = 50, segV = 50) {
+  plotVectorField(fn, bound, step, metric) {
     this.clearPlot();
-
-    const geometry = new THREE.BufferGeometry();
-    const positions = [];
-    const colors = [];
-    const indices = [];
-
-    const du = (uRange[1] - uRange[0]) / segU;
-    const dv = (vRange[1] - vRange[0]) / segV;
-
-    let minZ = Infinity, maxZ = -Infinity;
-    const rawPoints = [];
-
-    for (let j = 0; j <= segV; j++) {
-      const v = vRange[0] + j * dv;
-      for (let i = 0; i <= segU; i++) {
-        const u = uRange[0] + i * du;
-        try {
-          const pt = fn(u, v);
-          const px = isFinite(pt.x) ? pt.x : 0;
-          const py = isFinite(pt.y) ? pt.y : 0;
-          const pz = isFinite(pt.z) ? pt.z : 0;
-          positions.push(px, pz, py);
-          rawPoints.push({ x: px, y: py, z: pz });
-          if (pz < minZ) minZ = pz;
-          if (pz > maxZ) maxZ = pz;
-        } catch (e) {
-          positions.push(0, 0, 0);
-          rawPoints.push({ x: 0, y: 0, z: 0 });
-        }
-      }
-    }
-
-    const span = (maxZ - minZ) || 1;
-    for (let k = 0; k < rawPoints.length; k++) {
-      const norm = (rawPoints[k].z - minZ) / span;
-      const col = this.getColor(norm, this.options.colorMap);
-      colors.push(col.r, col.g, col.b);
-    }
-
-    for (let j = 0; j < segV; j++) {
-      for (let i = 0; i < segU; i++) {
-        const a = j * (segU + 1) + i;
-        const b = a + 1;
-        const c = a + (segU + 1);
-        const d = c + 1;
-        indices.push(a, c, b);
-        indices.push(b, c, d);
-      }
-    }
-
-    geometry.setIndex(indices);
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-    geometry.computeVertexNormals();
-
-    const material = new THREE.MeshStandardMaterial({
-      vertexColors: true,
-      side: THREE.DoubleSide,
-      wireframe: this.options.wireframe,
-      roughness: 0.3,
-      metalness: 0.2
-    });
-
-    const mesh = new THREE.Mesh(geometry, material);
-    this.plotGroup.add(mesh);
-  }
-
-  // --- 3D Vector Field: F(x,y,z) = (u,v,w) ---
-  plotVectorField(fn, bound = 4, step = 1.8) {
-    this.clearPlot();
-
+    const samples = [];
     for (let x = -bound; x <= bound; x += step) {
       for (let y = -bound; y <= bound; y += step) {
         for (let z = -bound; z <= bound; z += step) {
-          try {
-            const vec = fn(x, y, z);
-            const dir = new THREE.Vector3(vec.u, vec.w, vec.v);
-            const len = dir.length();
-            if (len > 0.001) {
-              dir.normalize();
-              const arrowLen = Math.min(step * 0.85, len * 0.6);
-              const col = this.getColor(Math.min(1, len / 5), this.options.colorMap);
-              const arrow = new THREE.ArrowHelper(dir, new THREE.Vector3(x, z, y), arrowLen, col.getHex(), arrowLen * 0.25, arrowLen * 0.12);
-              this.plotGroup.add(arrow);
-            }
-          } catch (e) {}
+          let vector;
+          try { vector = fn(x, y, z); } catch { continue; }
+          const direction = new THREE.Vector3(vector.u, vector.w, vector.v);
+          const length = direction.length();
+          if (!Number.isFinite(length) || length <= 0.001) continue;
+          samples.push({
+            origin: new THREE.Vector3(x, z, y),
+            direction: direction.divideScalar(length),
+            arrowLength: Math.min(step * 0.85, length * 0.6),
+            value: metric === 'height' ? z : length
+          });
         }
       }
     }
+
+    this.shading.measure(samples.map(sample => sample.value));
+    for (const { origin, direction, arrowLength, value } of samples) {
+      const color = metric === 'solid' ? this.shading.solidColor : this.shading.colorFor(value);
+      const arrow = new THREE.ArrowHelper(direction, origin, arrowLength, color, arrowLength * 0.25, arrowLength * 0.12);
+      this.plotGroup.add(arrow);
+    }
+    this.geometryCounts = { points: samples.length * 2, edges: samples.length, faces: 0 };
   }
 
   // --- Calculus Visualizations: Tangent Plane & Gradient Vector ---
-  updateCalculusOverlays(fn, fx, fy, x0 = 0, y0 = 0, showPlane = true, showGrad = true) {
+  updateCalculusOverlays(fn, fx, fy, x0 = 1.0, y0 = 1.0, showPlane = true, showGrad = true) {
     while (this.calculusGroup.children.length > 0) {
-      this.calculusGroup.remove(this.calculusGroup.children[0]);
+      const obj = this.calculusGroup.children[0];
+      if (obj.geometry) obj.geometry.dispose();
+      this.calculusGroup.remove(obj);
     }
 
     if (!showPlane && !showGrad) return;
@@ -529,14 +550,17 @@ export class Viewport3D {
       z0 = fn(x0, y0);
       dz_dx = fx(x0, y0);
       dz_dy = fy(x0, y0);
+      if (!isFinite(z0)) z0 = 0;
+      if (!isFinite(dz_dx)) dz_dx = 0;
+      if (!isFinite(dz_dy)) dz_dy = 0;
     } catch (e) {
       return;
     }
 
     // 1. Tangent Plane: z - z0 = dz_dx*(x - x0) + dz_dy*(y - y0)
     if (showPlane) {
-      const planeSize = 2.5;
-      const planeGeo = new THREE.PlaneGeometry(planeSize * 2, planeSize * 2, 4, 4);
+      const planeSize = 2.8;
+      const planeGeo = new THREE.PlaneGeometry(planeSize * 2, planeSize * 2, 6, 6);
       const planeMat = new THREE.MeshStandardMaterial({
         color: 0x00c6ff,
         transparent: true,
@@ -545,22 +569,21 @@ export class Viewport3D {
       });
       const planeMesh = new THREE.Mesh(planeGeo, planeMat);
 
-      // Normal to plane: (-dz_dx, 1, -dz_dy) in math coords -> (-dz_dx, 1, -dz_dy) in 3D: (X: -dz_dx, Y: 1, Z: -dz_dy)
+      // Normal in 3D: (X: -dz_dx, Y: 1, Z: -dz_dy)
       const normal = new THREE.Vector3(-dz_dx, 1, -dz_dy).normalize();
       planeMesh.position.set(x0, z0, y0);
       planeMesh.lookAt(new THREE.Vector3(x0, z0, y0).add(normal));
-
       this.calculusGroup.add(planeMesh);
 
-      // Sphere at tangent point
-      const pointGeo = new THREE.SphereGeometry(0.12, 16, 16);
+      // Red Sphere indicator at tangent contact point
+      const pointGeo = new THREE.SphereGeometry(0.14, 16, 16);
       const pointMat = new THREE.MeshBasicMaterial({ color: 0xff0055 });
       const pointMesh = new THREE.Mesh(pointGeo, pointMat);
       pointMesh.position.set(x0, z0, y0);
       this.calculusGroup.add(pointMesh);
     }
 
-    // 2. Gradient Vector: (dz_dx, dz_dy) in XY plane
+    // 2. Gradient Vector: (dz_dx, dz_dy) in horizontal plane
     if (showGrad) {
       const gradLen = Math.sqrt(dz_dx * dz_dx + dz_dy * dz_dy);
       if (gradLen > 0.001) {
@@ -568,12 +591,53 @@ export class Viewport3D {
         const gradArrow = new THREE.ArrowHelper(
           gradDir,
           new THREE.Vector3(x0, z0 + 0.05, y0),
-          Math.min(3, gradLen),
+          Math.min(3.5, gradLen * 1.2),
           0xffbb00,
-          0.3,
-          0.12
+          0.35,
+          0.14
         );
         this.calculusGroup.add(gradArrow);
+      }
+    }
+  }
+
+  // --- Real 3D Riemann Sum Prisms Visualization ---
+  renderRiemannSum(fn, xRange = [-3, 3], yRange = [-3, 3], nx = 8, ny = 8) {
+    while (this.calculusGroup.children.length > 0) {
+      const obj = this.calculusGroup.children[0];
+      if (obj.geometry) obj.geometry.dispose();
+      this.calculusGroup.remove(obj);
+    }
+
+    const dx = (xRange[1] - xRange[0]) / nx;
+    const dy = (yRange[1] - yRange[0]) / ny;
+
+    const boxMat = new THREE.MeshStandardMaterial({
+      color: 0x00c6ff,
+      transparent: true,
+      opacity: 0.45,
+      roughness: 0.4
+    });
+
+    for (let i = 0; i < nx; i++) {
+      const x = xRange[0] + (i + 0.5) * dx;
+      for (let j = 0; j < ny; j++) {
+        const y = yRange[0] + (j + 0.5) * dy;
+        let h = 0;
+        try {
+          h = fn(x, y);
+          if (!isFinite(h)) h = 0;
+        } catch (e) {
+          h = 0;
+        }
+
+        if (Math.abs(h) > 0.05) {
+          const height = Math.abs(h);
+          const geo = new THREE.BoxGeometry(dx * 0.9, height, dy * 0.9);
+          const prism = new THREE.Mesh(geo, boxMat);
+          prism.position.set(x, h >= 0 ? height / 2 : -height / 2, y);
+          this.calculusGroup.add(prism);
+        }
       }
     }
   }
@@ -587,24 +651,22 @@ export class Viewport3D {
     let curX = 0, curY = 0, curZ = 0;
 
     for (let k = 0; k < harmonics.length; k++) {
-      const h = harmonics[k]; // { freq, amp, phase }
+      const h = harmonics[k];
       const radius = h.amp * scale;
       const angle = h.freq * tVal + (h.phase || 0);
 
-      // Draw phasor circle
       const circleGeo = new THREE.BufferGeometry();
       const circlePts = [];
-      const numSegs = 40;
+      const numSegs = 36;
       for (let s = 0; s <= numSegs; s++) {
         const th = (s / numSegs) * Math.PI * 2;
         circlePts.push(curX + radius * Math.cos(th), curY + radius * Math.sin(th), curZ);
       }
       circleGeo.setAttribute('position', new THREE.Float32BufferAttribute(circlePts, 3));
-      const circleMat = new THREE.LineBasicMaterial({ color: 0x555555, transparent: true, opacity: 0.6 });
+      const circleMat = new THREE.LineBasicMaterial({ color: 0x666666, transparent: true, opacity: 0.6 });
       const circleLine = new THREE.Line(circleGeo, circleMat);
       this.epicycleGroup.add(circleLine);
 
-      // Phasor arm vector
       const nextX = curX + radius * Math.cos(angle);
       const nextY = curY + radius * Math.sin(angle);
       const armDir = new THREE.Vector3(nextX - curX, nextY - curY, 0).normalize();
@@ -617,15 +679,20 @@ export class Viewport3D {
   }
 
   clearPlot() {
-    while (this.plotGroup.children.length > 0) {
-      const obj = this.plotGroup.children[0];
-      if (obj.geometry) obj.geometry.dispose();
-      if (obj.material) {
-        if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
-        else obj.material.dispose();
+    this.geometryCounts = { points: 0, edges: 0, faces: 0 };
+    this.wire?.geometry.dispose();
+    this.plotMesh?.geometry.dispose();
+    this.plotGroup.traverse(object => {
+      // Arrow helpers share geometry and own their individual materials.
+      if (object.type === 'ArrowHelper') {
+        object.line.material.dispose();
+        object.cone.material.dispose();
       }
-      this.plotGroup.remove(obj);
-    }
+    });
+    this.plotGroup.clear();
+    this.surfaceCache = null;
+    this.plotMesh = null;
+    this.wire = null;
   }
 
   resetCamera(viewMode = 'iso') {
@@ -651,22 +718,14 @@ export class Viewport3D {
     this.controls.update();
   }
 
-  toggleAxes(show) {
-    this.options.showAxes = show;
-    this.axisGroup.visible = show;
+  configureGuides(settings) {
+    this.guides.configure(settings);
+    this.syncWireframe();
   }
 
-  toggleGrid(show) {
-    this.options.showGrid = show;
-    if (this.gridHelper) this.gridHelper.visible = show;
-  }
-
-  toggleWireframe(wire) {
-    this.options.wireframe = wire;
-  }
-
-  setColorMap(mapName) {
-    this.options.colorMap = mapName;
+  setGuideTheme(light) {
+    this.guides.setLightTheme(light);
+    this.wireMaterial.color.setHex(light ? 0x30353b : 0xe2e6eb);
   }
 
   animate() {
@@ -675,6 +734,7 @@ export class Viewport3D {
       return;
     }
     this.controls.update();
+    this.guides.update(this.camera, this.renderHeight);
     this.renderer.render(this.scene, this.camera);
   }
 }

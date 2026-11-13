@@ -6,12 +6,22 @@
 
 import katex from 'katex';
 import { Viewport3D } from './modules/viewport3d.js';
+import { propertyMetrics } from './modules/property_shading.js';
 import { ExpressionParser } from './modules/expression_parser.js';
 import { KeyframeEngine } from './modules/keyframe_engine.js';
 import { PresetsManager } from './modules/presets_manager.js';
 import { CodeGenerator } from './modules/code_generator.js';
 import { PanelManager } from './modules/panel_manager.js';
 import { TimelineEditor } from './modules/timeline_editor.js';
+import { MathNodes } from './modules/math_nodes.js';
+import { MeshWorkspace } from './modules/mesh_workspace.js';
+import { OrthographicViews } from './modules/orthographic_views.js';
+import { InterfaceLanguage, getLocale, translate } from './modules/i18n.js';
+
+const legendNumberFormats = {
+  'zh-CN': new Intl.NumberFormat('zh-CN', { maximumSignificantDigits: 5 }),
+  en: new Intl.NumberFormat('en', { maximumSignificantDigits: 5 })
+};
 
 class App {
   constructor() {
@@ -30,7 +40,7 @@ class App {
     });
 
     // Workspace layout state (persisted across sessions).
-    this.layoutDefaults = { sidebar: 290, content: 520, timeline: 240, cameraPanel: false };
+    this.layoutDefaults = { version: 2, leftWidth: null, attributeWidth: null, bottomHeight: null, layerWidthPercent: null, cameraPanel: false };
     this.layout = Object.assign({}, this.layoutDefaults);
 
     this.activeType = 'explicit'; // 'explicit' | 'parametric_curve' | 'parametric_surface' | 'vector_field'
@@ -49,10 +59,28 @@ class App {
     this.fourierEpicyclesActive = false;
     this.activeHarmonics = [];
 
-    this.projectName = '未命名项目';
+    this._compiledFn = null;
+    this._compiledType = null;
+
+    // Connect 3D surface click picking to calculus tangent plane
+    this.viewport.onSurfacePicked = (mx, my, mz) => {
+      for (const [axis, value] of [['x', mx], ['y', my], ['z', mz]]) {
+        document.getElementById(`picked-${axis}`).textContent = value.toFixed(2);
+      }
+      const tanX0 = document.getElementById('tangent-x0');
+      const tanY0 = document.getElementById('tangent-y0');
+      if (tanX0 && tanY0) {
+        tanX0.value = mx.toFixed(2);
+        tanY0.value = my.toFixed(2);
+        this.refreshCalculusOverlays();
+        this.toast(`已拾取切点: (${mx.toFixed(2)}, ${my.toFixed(2)}, ${mz.toFixed(2)})`, 'info');
+      }
+    };
+
+    this.projectName = null;
     this.projectPath = null;
 
-    this.initSidebarNavigation();
+    this.initWorkspaceNavigation();
     this.initStudioControls();
     this.initKeyframeControls();
     this.initCalculusControls();
@@ -62,6 +90,18 @@ class App {
     this.initTimelinePlayback();
     this.initTimelineToolbar();
     this.initCameraPanel();
+    const renderFrame = () => {
+      const time = this.keyframes.currentTime;
+      this.renderCurrentFrame(time, this.keyframes.evaluateAll(time));
+    };
+    this.mathNodes = new MathNodes(() => {
+      renderFrame();
+      this.updateCodeGenerator(document.querySelector('.code-tab-btn.active')?.dataset.lang);
+    });
+    this.meshWorkspace = new MeshWorkspace(this.viewport, renderFrame);
+    this.orthographicViews = new OrthographicViews(document.getElementById('workspace-algebra'), this.viewport);
+    this.initWorkspaceControls();
+    this.initViewportDisplayControls();
     this.initLayoutManager();
     this.initProjectManagement();
     this.initTopMenubar();
@@ -70,6 +110,7 @@ class App {
 
     // Blender-style collapsible panel management (per-panel type dropdown).
     this.panels = new PanelManager();
+    this.initLanguageSettings();
 
     this.hasInitializedStudio = false;
 
@@ -110,35 +151,112 @@ class App {
     });
   }
 
+  initLanguageSettings() {
+    const select = document.getElementById('language-select');
+    this.interfaceLanguage = new InterfaceLanguage(document.body);
+    let remembered;
+    try { remembered = localStorage.getItem('mathstudio_interface_language'); } catch {}
+    this.setInterfaceLanguage(remembered);
+
+    let userChanged = false;
+    let saveRequest = Promise.resolve();
+    const saveNativeLanguage = language => {
+      saveRequest = saveRequest.then(async () => {
+        if (!await this.nativeCall('save_language', [language])) this.toast('语言设置保存失败', 'error');
+      });
+    };
+    const loadNativeLanguage = async () => {
+      if (userChanged) {
+        saveNativeLanguage(select.value);
+        return;
+      }
+      const preference = await this.nativeCall('load_language', []);
+      if (!userChanged && preference) this.setInterfaceLanguage(preference);
+    };
+    if (this.isNative()) loadNativeLanguage();
+    else window.addEventListener('pywebviewready', loadNativeLanguage, { once: true });
+
+    select.addEventListener('change', () => {
+      userChanged = true;
+      const selected = select.value;
+      this.setInterfaceLanguage(selected);
+      if (this.isNative()) saveNativeLanguage(selected);
+    });
+  }
+
+  setInterfaceLanguage(language) {
+    this.interfaceLanguage.setLocale(language);
+    const locale = getLocale();
+    document.getElementById('language-select').value = locale;
+    try { localStorage.setItem('mathstudio_interface_language', locale); } catch {}
+    this.syncPresetLanguage();
+    this.mathNodes.render();
+    this.legendKey = null;
+    this.updateShadingLegend();
+    this.geometryKey = null;
+    this.updateGeometryInfo();
+    const codeTab = document.querySelector('.code-tab-btn.active');
+    this.updateCodeGenerator(codeTab?.dataset.lang || 'threejs');
+  }
+
   // --------------------------------------------------------------------------
-  // Sidebar Navigation & Page Tabs
+  // Workspace Navigation & Page Tabs
   // --------------------------------------------------------------------------
-  initSidebarNavigation() {
-    const navItems = document.querySelectorAll('.sidebar-nav .nav-item');
+  initWorkspaceNavigation() {
+    const navItems = document.querySelectorAll('.workspace-nav .nav-item');
     const sections = document.querySelectorAll('.page-section');
+    const program = document.getElementById('settings-scroll-pane');
+    const back = document.getElementById('program-back');
 
     navItems.forEach(item => {
+      item.setAttribute('aria-pressed', String(item.classList.contains('active')));
       item.addEventListener('click', () => {
-        navItems.forEach(i => i.classList.remove('active'));
-        sections.forEach(s => s.classList.remove('active'));
-
-        item.classList.add('active');
-        const targetId = `sec-${item.dataset.target}`;
-        const targetSection = document.getElementById(targetId);
-        if (targetSection) targetSection.classList.add('active');
-
-        if (item.dataset.target === 'export') {
-          this.updateCodeGenerator();
-        }
+        document.body.classList.remove('focus-3d');
+        if (!document.getElementById('page-studio').classList.contains('active')) this.showPage('studio');
+        navItems.forEach(button => {
+          button.classList.toggle('active', button === item);
+          button.setAttribute('aria-pressed', String(button === item));
+        });
+        sections.forEach(section => section.classList.toggle('active', section.id === `sec-${item.dataset.target}`));
+        back.hidden = item.dataset.target === 'studio';
+        program.scrollTop = 0;
+        if (item.dataset.target === 'export') this.updateCodeGenerator();
       });
     });
 
-    // Theme toggle
-    const themeBtn = document.getElementById('theme-toggle-btn');
-    themeBtn.addEventListener('click', () => {
-      const current = document.documentElement.getAttribute('data-theme');
-      const next = current === 'dark' ? 'light' : 'dark';
-      document.documentElement.setAttribute('data-theme', next);
+    const entries = [...program.querySelectorAll('[data-program]')];
+    entries.forEach(button => {
+      button.addEventListener('click', () => {
+        this.switchToTab(button.dataset.program);
+        back.focus();
+      });
+    });
+    back.addEventListener('click', () => {
+      const activeTool = [...navItems].find(item => item.classList.contains('active'));
+      this.switchToTab('studio');
+      const entry = entries.find(button => button.dataset.program === activeTool?.dataset.target);
+      (entry || entries[0]).focus();
+    });
+    document.getElementById('workspace-home-btn').addEventListener('click', () => this.showPage('home'));
+
+    const search = document.getElementById('nav-search-input');
+    const presets = this.presets.getAllPresets();
+    document.getElementById('function-search').addEventListener('submit', event => {
+      event.preventDefault();
+      const query = search.value.trim().toLocaleLowerCase();
+      if (!query) return;
+      const match = presets.find(preset => translate(preset.name).toLocaleLowerCase() === query)
+        || presets.find(preset => [preset.name, preset.category, translate(preset.name), translate(preset.category), preset.id]
+          .some(value => value.toLocaleLowerCase().includes(query)));
+      if (!match) {
+        this.toast('未找到匹配的函数预设', 'info');
+        return;
+      }
+      this.switchToTab('presets');
+      const selector = document.getElementById('preset-selector');
+      selector.value = match.id;
+      selector.dispatchEvent(new Event('change'));
+      search.blur();
     });
   }
 
@@ -180,6 +298,7 @@ class App {
     const home = document.getElementById('page-home');
     const studio = document.getElementById('page-studio');
     if (page === 'home') {
+      this.mathNodes.closeMenu();
       home.classList.add('active');
       studio.classList.remove('active');
       this.refreshProjectList();
@@ -320,7 +439,7 @@ class App {
       item.className = 'home-project-item';
       item.innerHTML = `
         <div class="pj-info">
-          <div class="pj-name">${this.escapeHtml(p.name)}</div>
+          <div class="pj-name" data-i18n-keep>${this.escapeHtml(p.name)}</div>
           <div class="pj-meta">${this.escapeHtml(p.savedAtStr || '')}</div>
         </div>
         <span class="pj-open">打开</span>
@@ -345,18 +464,19 @@ class App {
   initProjectManagement() {
     document.getElementById('new-project-btn')?.addEventListener('click', () => this.newProject());
     document.getElementById('open-project-btn')?.addEventListener('click', () => this.openProject());
-    document.getElementById('back-home-btn')?.addEventListener('click', () => this.showPage('home'));
-    document.getElementById('save-project-btn')?.addEventListener('click', () => this.saveProject(false));
     this.refreshProjectList();
   }
 
   updateProjectPill() {
     const el = document.getElementById('menubar-project-name');
-    if (el) el.textContent = this.projectName || '未命名项目';
+    if (el) {
+      el.toggleAttribute('data-i18n-keep', Boolean(this.projectName));
+      el.textContent = this.projectName || '未命名项目';
+    }
   }
 
   async newProject() {
-    const name = await this.showPrompt('新建项目', '请输入新项目的名称', '未命名项目');
+    const name = await this.showPrompt('新建项目', '请输入新项目的名称', translate('未命名项目'));
     if (!name || !name.trim()) return;
     this.projectName = name.trim();
     this.projectPath = null;
@@ -507,13 +627,13 @@ class App {
     document.getElementById('menubar-theme-btn')?.addEventListener('click', () => {
       const cur = document.documentElement.getAttribute('data-theme');
       const next = cur === 'dark' ? 'light' : 'dark';
-      document.documentElement.setAttribute('data-theme', next);
+      this.setTheme(next);
       this.toast(`已切换至${next === 'dark' ? '深色' : '浅色'}模式`, 'success');
     });
 
     // Project pill rename
     document.getElementById('menubar-project-pill')?.addEventListener('click', async () => {
-      const newName = await this.showPrompt('重命名项目', '请输入项目的新名称：', this.projectName);
+      const newName = await this.showPrompt('重命名项目', '请输入项目的新名称：', this.projectName || translate('未命名项目'));
       if (newName && newName.trim()) {
         this.projectName = newName.trim();
         this.updateProjectPill();
@@ -655,10 +775,11 @@ class App {
         document.body.classList.remove('focus-3d');
         this.showPage('studio');
         requestAnimationFrame(() => this.viewport.onWindowResize());
-        this.toast('已切换为经典双栏工作模式', 'success');
+        this.toast('已恢复工作台布局', 'success');
         break;
       case 'layout-fullscreen-3d':
         this.showPage('studio');
+        document.querySelector('[data-view-tab="view"]').click();
         document.body.classList.toggle('focus-3d');
         requestAnimationFrame(() => this.viewport.onWindowResize());
         const isFocus = document.body.classList.contains('focus-3d');
@@ -671,18 +792,15 @@ class App {
         this.showPage('studio');
         break;
       case 'theme-dark':
-        document.documentElement.setAttribute('data-theme', 'dark');
-        this.viewport.scene.background.setHex(0x181818);
+        this.setTheme('dark');
         this.toast('已切换为深色模式', 'success');
         break;
       case 'theme-light':
-        document.documentElement.setAttribute('data-theme', 'light');
-        this.viewport.scene.background.setHex(0xf5f5f5);
+        this.setTheme('light');
         this.toast('已切换为浅色模式', 'success');
         break;
       case 'theme-black':
-        document.documentElement.setAttribute('data-theme', 'dark');
-        this.viewport.scene.background.setHex(0x000000);
+        this.setTheme('dark', 0x000000);
         this.toast('已切换为赛博纯黑高对比模式', 'success');
         break;
       case 'zoom-iso':
@@ -702,27 +820,14 @@ class App {
         break;
       case 'zoom-reset':
         this.viewport.resetCamera('iso');
+        document.getElementById('viewport-zoom').value = 100;
+        document.getElementById('viewport-zoom').dispatchEvent(new Event('input'));
         break;
-      case 'view-wireframe-toggle':
-        const wire = document.getElementById('wireframe-toggle');
-        if (wire) {
-          wire.checked = !wire.checked;
-          wire.dispatchEvent(new Event('change'));
-        }
+      case 'view-overlays':
+        this.openViewportSettings('overlay-menu');
         break;
-      case 'view-axes-toggle':
-        const axes = document.getElementById('pref-axes-toggle');
-        if (axes) {
-          axes.checked = !axes.checked;
-          axes.dispatchEvent(new Event('change'));
-        }
-        break;
-      case 'view-grid-toggle':
-        const grid = document.getElementById('pref-grid-toggle');
-        if (grid) {
-          grid.checked = !grid.checked;
-          grid.dispatchEvent(new Event('change'));
-        }
+      case 'view-shading':
+        this.openViewportSettings('shading-menu');
         break;
 
       // --- Windows Menu ---
@@ -763,7 +868,7 @@ class App {
   }
 
   switchToTab(tabName) {
-    const item = document.querySelector(`.sidebar-nav .nav-item[data-target="${tabName}"]`);
+    const item = document.querySelector(`.workspace-nav .nav-item[data-target="${tabName}"]`);
     if (item) item.click();
   }
 
@@ -780,6 +885,11 @@ class App {
   zoomCamera(factor) {
     if (!this.viewport || !this.viewport.camera || !this.viewport.controls) return;
     const cam = this.viewport.camera;
+    if (cam.isOrthographicCamera) {
+      this.viewport.setZoom(cam.zoom / (1 - factor));
+      this.syncViewportZoom();
+      return;
+    }
     const target = this.viewport.controls.target;
     if (factor > 0) {
       cam.position.lerp(target, factor);
@@ -903,7 +1013,7 @@ class App {
     } catch (e) {}
 
     const reportObj = {
-      app: 'Math Studio v2.0.4 Enterprise',
+      app: 'Math Studio v2.1.0 Enterprise',
       time: new Date().toISOString(),
       screen: `${window.screen.width}x${window.screen.height} (ratio: ${window.devicePixelRatio})`,
       gpu: glInfo,
@@ -925,7 +1035,7 @@ class App {
     window.addEventListener('keydown', async (e) => {
       // Don't intercept if user is typing in input or textarea
       const tag = (e.target.tagName || '').toLowerCase();
-      const isInput = tag === 'input' || tag === 'textarea';
+      const isInput = ['input', 'textarea', 'select', 'button'].includes(tag);
 
       // F11: Toggle Fullscreen
       if (e.key === 'F11') {
@@ -1049,7 +1159,7 @@ class App {
       setTimeout(() => {
         btn.textContent = '🔄 检查更新';
         btn.disabled = false;
-        this.toast('✓ 当前 Math Studio 2.0.4 已是最新发布版本！', 'success');
+        this.toast('当前版本：Math Studio 2.1.0', 'success');
       }, 600);
     });
 
@@ -1113,8 +1223,9 @@ class App {
   }
 
   serializeProject() {
+    const { guides, shading } = this.viewport;
     return {
-      name: this.projectName || '未命名项目',
+      name: this.projectName || translate('未命名项目'),
       activeType: this.activeType,
       activeSetup: JSON.parse(JSON.stringify(this.activeSetup)),
       parameters: JSON.parse(JSON.stringify(this.keyframes.parameters)),
@@ -1123,16 +1234,27 @@ class App {
       currentTime: this.keyframes.currentTime,
       fourierEpicyclesActive: this.fourierEpicyclesActive,
       activeHarmonics: JSON.parse(JSON.stringify(this.activeHarmonics || [])),
+      mathNodes: this.mathNodes.serialize(),
+      meshSnapshot: this.meshWorkspace.serialize(),
       viewport: {
-        colormap: this.viewport.options.colorMap,
-        wireframe: this.viewport.options.wireframe,
-        showAxes: this.viewport.options.showAxes,
-        showGrid: this.viewport.options.showGrid
+        colormap: shading.palette,
+        wireframe: guides.settings.wireMode === 'only',
+        showAxes: guides.settings.axes.some(Boolean),
+        showGrid: guides.settings.floor,
+        guides: structuredClone(guides.settings),
+        shading: {
+          metric: this.shadingMetric,
+          range: shading.manualRange ? [...shading.manualRange] : null,
+          showLegend: this.showColorLegend
+        }
       }
     };
   }
 
   applyProject(data) {
+    this.mathNodes.load(data.mathNodes);
+    this.meshWorkspace.load(data.meshSnapshot);
+    this.invalidateCompiledFunction();
     if (data.activeType) this.activeType = data.activeType;
     if (data.activeSetup) this.activeSetup = Object.assign({}, this.activeSetup, data.activeSetup);
     this.activeSetup.type = this.activeType;
@@ -1148,17 +1270,8 @@ class App {
     this.fourierEpicyclesActive = !!data.fourierEpicyclesActive;
     this.activeHarmonics = data.activeHarmonics || [];
 
-    if (data.viewport) {
-      const vp = data.viewport;
-      this.viewport.setColorMap(vp.colormap || 'coolwarm');
-      this.viewport.toggleWireframe(!!vp.wireframe);
-      this.viewport.toggleAxes(vp.showAxes !== false);
-      this.viewport.toggleGrid(vp.showGrid !== false);
-      document.getElementById('colormap-select').value = vp.colormap || 'coolwarm';
-      document.getElementById('wireframe-toggle').checked = !!vp.wireframe;
-      document.getElementById('pref-axes-toggle').checked = vp.showAxes !== false;
-      document.getElementById('pref-grid-toggle').checked = vp.showGrid !== false;
-    }
+    this.restoreViewportDisplay(data.viewport);
+    this.setLayerVisibility(true);
 
     document.getElementById('timeline-duration-input').value = this.keyframes.duration;
     document.getElementById('timeline-scrubber-slider').max = this.keyframes.duration;
@@ -1177,6 +1290,9 @@ class App {
   }
 
   resetProjectState() {
+    this.mathNodes.load();
+    this.meshWorkspace.load();
+    this.invalidateCompiledFunction();
     this.activeType = 'explicit';
     this.activeSetup = {
       type: 'explicit',
@@ -1205,17 +1321,12 @@ class App {
     this.keyframes.addKeyframe('phi', 0, 0);
     this.keyframes.addKeyframe('phi', 8.0, Math.PI * 2, { outerFunc: 'x', innerFunc: 'x' });
 
-    this.viewport.setColorMap('coolwarm');
-    this.viewport.toggleWireframe(false);
-    this.viewport.toggleAxes(true);
-    this.viewport.toggleGrid(true);
+    this.restoreViewportDisplay();
+    this.geometryKey = null;
+    this.setLayerVisibility(true);
 
     this.syncTypeBlocks();
     this.syncInputsFromSetup();
-    document.getElementById('colormap-select').value = 'coolwarm';
-    document.getElementById('wireframe-toggle').checked = false;
-    document.getElementById('pref-axes-toggle').checked = true;
-    document.getElementById('pref-grid-toggle').checked = true;
     document.getElementById('fourier-epicycles-toggle').checked = false;
     document.getElementById('tangent-plane-toggle').checked = false;
     document.getElementById('gradient-field-toggle').checked = false;
@@ -1242,7 +1353,7 @@ class App {
 
   syncInputsFromSetup() {
     const s = this.activeSetup || {};
-    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = (v === undefined || v === null) ? '' : v; };
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v ?? el.defaultValue; };
     set('expr-explicit-input', s.expr);
     set('curve-x-input', s.exprX);
     set('curve-y-input', s.exprY);
@@ -1270,27 +1381,39 @@ class App {
   refreshCalculusOverlays() {
     const tangentToggle = document.getElementById('tangent-plane-toggle');
     const gradToggle = document.getElementById('gradient-field-toggle');
+    const riemannToggle = document.getElementById('riemann-sum-toggle');
     const tanX0 = document.getElementById('tangent-x0');
     const tanY0 = document.getElementById('tangent-y0');
-    const showPlane = tangentToggle.checked;
-    const showGrad = gradToggle.checked;
-    const x0 = parseFloat(tanX0.value) || 0;
-    const y0 = parseFloat(tanY0.value) || 0;
+    const showPlane = tangentToggle ? tangentToggle.checked : false;
+    const showGrad = gradToggle ? gradToggle.checked : false;
+    const showRiemann = riemannToggle ? riemannToggle.checked : false;
+    const x0 = parseFloat(tanX0 ? tanX0.value : 0) || 0;
+    const y0 = parseFloat(tanY0 ? tanY0.value : 0) || 0;
 
-    if (!showPlane && !showGrad) {
+    const scope = this.keyframes.evaluateAll(this.keyframes.currentTime);
+    const fn = this.parser.compileExplicit(this.activeSetup.expr || '0');
+
+    if (showRiemann) {
+      this.viewport.renderRiemannSum(
+        (x, y) => fn(x, y, scope),
+        this.activeSetup.xRange || [-3, 3],
+        this.activeSetup.yRange || [-3, 3],
+        8, 8
+      );
+    } else if (!showPlane && !showGrad) {
       this.viewport.updateCalculusOverlays(() => 0, () => 0, () => 0, 0, 0, false, false);
       return;
     }
 
-    const scope = this.keyframes.evaluateAll(this.keyframes.currentTime);
-    const fn = this.parser.compileExplicit(this.activeSetup.expr || '0');
-    const { fx, fy } = this.parser.numericalPartials(fn);
-    this.viewport.updateCalculusOverlays(
-      (x, y) => fn(x, y, scope),
-      (x, y) => fx(x, y, scope),
-      (x, y) => fy(x, y, scope),
-      x0, y0, showPlane, showGrad
-    );
+    if (showPlane || showGrad) {
+      const { fx, fy } = this.parser.numericalPartials(fn);
+      this.viewport.updateCalculusOverlays(
+        (x, y) => fn(x, y, scope),
+        (x, y) => fx(x, y, scope),
+        (x, y) => fy(x, y, scope),
+        x0, y0, showPlane, showGrad
+      );
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -1303,10 +1426,7 @@ class App {
       this.activeType = e.target.value;
       this.activeSetup.type = this.activeType;
       this.syncTypeBlocks();
-      this.updateActiveFormulaPreview();
-      this.renderCurrentFrame(this.keyframes.currentTime, this.keyframes.evaluateAll(this.keyframes.currentTime));
-      this.updateCodeGenerator();
-      this.refreshCalculusOverlays();
+      this.applyExpressionsFromInputs();
     });
 
     // Domain range inputs
@@ -1316,8 +1436,13 @@ class App {
     const yMaxInput = document.getElementById('range-ymax');
 
     const updateDomain = () => {
-      this.activeSetup.xRange = [parseFloat(xMinInput.value) || -5, parseFloat(xMaxInput.value) || 5];
-      this.activeSetup.yRange = [parseFloat(yMinInput.value) || -5, parseFloat(yMaxInput.value) || 5];
+      const [xMin, xMax, yMin, yMax] = [xMinInput, xMaxInput, yMinInput, yMaxInput].map(input => input.valueAsNumber);
+      if (![xMin, xMax, yMin, yMax].every(Number.isFinite) || xMin >= xMax || yMin >= yMax) {
+        this.toast('定义域的最小值必须小于最大值', 'error');
+        return;
+      }
+      this.activeSetup.xRange = [xMin, xMax];
+      this.activeSetup.yRange = [yMin, yMax];
       this.renderCurrentFrame(this.keyframes.currentTime, this.keyframes.evaluateAll(this.keyframes.currentTime));
     };
 
@@ -1329,20 +1454,6 @@ class App {
     meshSlider.addEventListener('input', (e) => {
       this.activeSetup.meshRes = parseInt(e.target.value);
       meshVal.textContent = `${this.activeSetup.meshRes}x${this.activeSetup.meshRes}`;
-      this.renderCurrentFrame(this.keyframes.currentTime, this.keyframes.evaluateAll(this.keyframes.currentTime));
-    });
-
-    // Color Map
-    const colormapSelect = document.getElementById('colormap-select');
-    colormapSelect.addEventListener('change', (e) => {
-      this.viewport.setColorMap(e.target.value);
-      this.renderCurrentFrame(this.keyframes.currentTime, this.keyframes.evaluateAll(this.keyframes.currentTime));
-    });
-
-    // Wireframe toggle
-    const wireToggle = document.getElementById('wireframe-toggle');
-    wireToggle.addEventListener('change', (e) => {
-      this.viewport.toggleWireframe(e.target.checked);
       this.renderCurrentFrame(this.keyframes.currentTime, this.keyframes.evaluateAll(this.keyframes.currentTime));
     });
 
@@ -1365,6 +1476,7 @@ class App {
   }
 
   applyExpressionsFromInputs() {
+    this.invalidateCompiledFunction();
     if (this.activeType === 'explicit') {
       this.activeSetup.expr = document.getElementById('expr-explicit-input').value;
     } else if (this.activeType === 'parametric_curve') {
@@ -1513,7 +1625,7 @@ class App {
       card.innerHTML = `
         <div class="param-header">
           <div class="param-tag">
-            <span>参数:</span> <b>${name}</b>
+            <span>参数:</span> <b data-i18n-keep>${this.escapeHtml(name)}</b>
             <span style="font-size: 11px; color: var(--win-text-secondary); margin-left: 8px;">(实时值: <span id="val-${name}">${param.currentVal.toFixed(2)}</span>)</span>
           </div>
           <div style="display: flex; gap: 6px;">
@@ -1630,6 +1742,7 @@ class App {
   }
 
   onKeyframeEdited(param, idx) {
+    this.selectKeyframeForEdit(param, idx);
     this.refreshParameterUI();
     this.renderCurrentFrame(this.keyframes.currentTime, this.keyframes.evaluateAll(this.keyframes.currentTime));
   }
@@ -1674,11 +1787,13 @@ class App {
         try {
           const res = await window.pywebview.api.compute_partials(expr);
           if (res.success) {
+            const h = res.hessian || {};
             const outTex = `
               \\begin{aligned}
-              \\frac{\\partial z}{\\partial x} &= ${res.dz_dx_latex} \\\\[6pt]
-              \\frac{\\partial z}{\\partial y} &= ${res.dz_dy_latex} \\\\[6pt]
-              \\nabla f &= \\left( ${res.dz_dx_latex}, \\, ${res.dz_dy_latex} \\right)
+              \\frac{\\partial z}{\\partial x} &= ${res.dz_dx_latex} \\\\[4pt]
+              \\frac{\\partial z}{\\partial y} &= ${res.dz_dy_latex} \\\\[4pt]
+              \\nabla f &= \\left( ${res.dz_dx_latex}, \\, ${res.dz_dy_latex} \\right) \\\\[6pt]
+              H &= \\begin{pmatrix} f_{xx} & f_{xy} \\\\ f_{yx} & f_{yy} \\end{pmatrix} = \\begin{pmatrix} ${h.f_xx_latex || 'f_{xx}'} & ${h.f_xy_latex || 'f_{xy}'} \\\\ ${h.f_xy_latex || 'f_{xy}'} & ${h.f_yy_latex || 'f_{yy}'} \\end{pmatrix}
               \\end{aligned}
             `;
             katex.render(outTex, katexOut, { throwOnError: false, displayMode: true });
@@ -1689,21 +1804,51 @@ class App {
           katexOut.textContent = "API 调用失败: " + e;
         }
       } else {
-        // Fallback local display
-        const outTex = `\\frac{\\partial z}{\\partial x} = \\text{Local Calc Mode}`;
-        katex.render(outTex, katexOut, { throwOnError: false });
+        katex.render(`\\nabla f = \\left( \\frac{\\partial z}{\\partial x}, \\frac{\\partial z}{\\partial y} \\right)`, katexOut, { throwOnError: false });
       }
     });
 
     // Tangent Plane Toggle & Coordinates
     const tangentToggle = document.getElementById('tangent-plane-toggle');
     const gradToggle = document.getElementById('gradient-field-toggle');
+    const riemannToggle = document.getElementById('riemann-sum-toggle');
     const tanX0 = document.getElementById('tangent-x0');
     const tanY0 = document.getElementById('tangent-y0');
 
-    [tangentToggle, gradToggle, tanX0, tanY0].forEach(el =>
+    [tangentToggle, gradToggle, riemannToggle, tanX0, tanY0].filter(Boolean).forEach(el =>
       el.addEventListener('change', () => this.refreshCalculusOverlays())
     );
+
+    // Taylor Series Button
+    const taylorBtn = document.getElementById('calc-taylor-btn');
+    const taylorCard = document.getElementById('card-taylor-result');
+    const taylorOut = document.getElementById('taylor-katex-out');
+
+    if (taylorBtn) {
+      taylorBtn.addEventListener('click', async () => {
+        const expr = this.activeSetup.expr || document.getElementById('expr-explicit-input').value;
+        const targetVar = document.getElementById('taylor-var-select')?.value || 'x';
+        const x0 = parseFloat(document.getElementById('taylor-x0')?.value) || 0;
+        const order = parseInt(document.getElementById('taylor-order')?.value) || 4;
+
+        taylorOut.innerHTML = '<span style="color: var(--win-accent);">SymPy 泰勒多项式展开计算中...</span>';
+        taylorCard.style.display = 'block';
+
+        if (window.pywebview && window.pywebview.api) {
+          try {
+            const res = await window.pywebview.api.compute_taylor(expr, targetVar, x0, order);
+            if (res.success) {
+              const latexStr = `P_{${order}}(${targetVar}) = ${res.latex}`;
+              katex.render(latexStr, taylorOut, { throwOnError: false, displayMode: true });
+            } else {
+              taylorOut.textContent = "展开失败: " + res.error;
+            }
+          } catch (e) {
+            taylorOut.textContent = "调用异常: " + e;
+          }
+        }
+      });
+    }
 
     // Integral Button
     const integralBtn = document.getElementById('calc-integral-btn');
@@ -1712,14 +1857,22 @@ class App {
 
     integralBtn.addEventListener('click', async () => {
       const expr = this.activeSetup.expr || document.getElementById('expr-explicit-input').value;
+      const targetVar = document.getElementById('integral-var-select')?.value || 'x';
+      const aVal = document.getElementById('integral-a-input')?.value.trim();
+      const bVal = document.getElementById('integral-b-input')?.value.trim();
+
       integralOut.innerHTML = '<span style="color: var(--win-accent);">SymPy 定积分计算中...</span>';
       integralCard.style.display = 'block';
 
       if (window.pywebview && window.pywebview.api) {
         try {
-          const res = await window.pywebview.api.compute_integral(expr, 'x', 0, 3.14159);
+          const res = await window.pywebview.api.compute_integral(expr, targetVar, aVal, bVal);
           if (res.success) {
-            katex.render(res.latex, integralOut, { throwOnError: false, displayMode: true });
+            let outLatex = res.latex;
+            if (res.numeric_val !== null && res.numeric_val !== undefined) {
+              outLatex += ` \\approx ${res.numeric_val.toFixed(6)}`;
+            }
+            katex.render(outLatex, integralOut, { throwOnError: false, displayMode: true });
           } else {
             integralOut.textContent = "积分计算: " + (res.error || "无法求出解析解，可采用数值黎曼和");
           }
@@ -1733,33 +1886,35 @@ class App {
   // --------------------------------------------------------------------------
   // Presets & Multi-Preset Mixing
   // --------------------------------------------------------------------------
+  syncPresetLanguage() {
+    const presets = this.presets.getAllPresets();
+    for (const id of ['preset-selector', 'mix-preset-a', 'mix-preset-b']) {
+      const select = document.getElementById(id);
+      const previous = select.value;
+      select.replaceChildren(...presets.map(preset => new Option(
+        `${translate(preset.category)} · ${translate(preset.name)}`, preset.id
+      )));
+      if (presets.some(preset => preset.id === previous)) select.value = previous;
+    }
+    const suggestions = document.getElementById('function-search-options');
+    suggestions.replaceChildren(...presets.map(preset => new Option(translate(preset.category), translate(preset.name))));
+    this.updatePresetDetail();
+  }
+
+  updatePresetDetail() {
+    const preset = this.presets.getPresetById(document.getElementById('preset-selector').value);
+    if (!preset) return;
+    document.getElementById('preset-detail-title').textContent = preset.name;
+    document.getElementById('preset-detail-desc').textContent = preset.description;
+  }
+
   initPresetControls() {
     const selector = document.getElementById('preset-selector');
     const mixA = document.getElementById('mix-preset-a');
     const mixB = document.getElementById('mix-preset-b');
 
-    this.presets.getAllPresets().forEach(p => {
-      const opt = `<option value="${p.id}">${p.category}: ${p.name}</option>`;
-      selector.insertAdjacentHTML('beforeend', opt);
-      mixA.insertAdjacentHTML('beforeend', opt);
-      mixB.insertAdjacentHTML('beforeend', opt);
-    });
-
-    // Sync detail card to the initially selected preset
-    const initialPreset = this.presets.getPresetById(selector.value);
-    if (initialPreset) {
-      document.getElementById('preset-detail-title').textContent = initialPreset.name;
-      document.getElementById('preset-detail-desc').textContent = initialPreset.description;
-    }
-
-    // Preset Detail Update
-    selector.addEventListener('change', (e) => {
-      const p = this.presets.getPresetById(e.target.value);
-      if (p) {
-        document.getElementById('preset-detail-title').textContent = p.name;
-        document.getElementById('preset-detail-desc').textContent = p.description;
-      }
-    });
+    this.syncPresetLanguage();
+    selector.addEventListener('change', () => this.updatePresetDetail());
 
     // Load Preset Button
     document.getElementById('load-preset-btn').addEventListener('click', () => {
@@ -1821,6 +1976,7 @@ class App {
   }
 
   loadPresetIntoStudio(preset) {
+    this.invalidateCompiledFunction();
     this.activeType = preset.type;
     this.activeSetup.type = preset.type;
     this.syncTypeBlocks();
@@ -1928,12 +2084,26 @@ class App {
 
     // Start MP4 Export (Frame-by-Frame HD Render via Python & FFmpeg)
     const exportBtn = document.getElementById('start-mp4-export-btn');
+    const cancelBtn = document.getElementById('cancel-mp4-export-btn');
     const progressCard = document.getElementById('export-progress-card');
     const progressBar = document.getElementById('export-progress-bar');
     const percentText = document.getElementById('export-percent-text');
     const statusText = document.getElementById('export-status-text');
     const finishActions = document.getElementById('export-finish-actions');
     let exportedFilePath = "";
+    let isExportCancelled = false;
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', async () => {
+        isExportCancelled = true;
+        statusText.textContent = "已请求取消导出，正在终止 FFmpeg 进程...";
+        if (window.pywebview && window.pywebview.api && window.pywebview.api.cancel_video_render) {
+          await window.pywebview.api.cancel_video_render();
+        }
+        exportBtn.disabled = false;
+        this.toast('已取消视频导出并清理临时文件', 'info');
+      });
+    }
 
     exportBtn.addEventListener('click', async () => {
       if (!window.pywebview || !window.pywebview.api) {
@@ -1946,6 +2116,7 @@ class App {
       if (!savePath) return;
 
       exportedFilePath = savePath;
+      isExportCancelled = false;
       exportBtn.disabled = true;
       progressCard.style.display = 'flex';
       finishActions.style.display = 'none';
@@ -1969,14 +2140,18 @@ class App {
       }
 
       // Temporarily resize viewport renderer to target resolution for pristine frame capture
+      document.querySelector('[data-view-tab="view"]').click();
       const origWidth = this.viewport.container.clientWidth;
       const origHeight = this.viewport.container.clientHeight;
-      this.viewport.renderer.setSize(width, height, false);
-      this.viewport.camera.aspect = width / height;
-      this.viewport.camera.updateProjectionMatrix();
+      this.viewport.resizeRenderer(width, height, false);
 
       // 3. Render Frame by Frame
       for (let f = 0; f < totalFrames; f++) {
+        if (isExportCancelled) {
+          statusText.textContent = "视频导出已由用户中止。";
+          break;
+        }
+
         const t = (f / fps);
         const scope = this.keyframes.evaluateAll(t);
 
@@ -1995,21 +2170,21 @@ class App {
         statusText.textContent = `正在逐帧渲染并编码: ${f + 1} / ${totalFrames} 帧`;
       }
 
-      // 4. Finish Rendering
-      statusText.textContent = "正在封闭封装 MP4 文件容器...";
-      const finishRes = await window.pywebview.api.finish_video_render();
-
       // Restore renderer size
-      this.viewport.renderer.setSize(origWidth, origHeight, false);
-      this.viewport.camera.aspect = origWidth / origHeight;
-      this.viewport.camera.updateProjectionMatrix();
+      this.viewport.resizeRenderer(origWidth, origHeight, false);
       exportBtn.disabled = false;
 
-      if (finishRes.success) {
-        statusText.textContent = `✓ 导出完成！文件大小: ${finishRes.file_size_mb} MB`;
-        finishActions.style.display = 'flex';
-      } else {
-        statusText.textContent = `导出出错: ${finishRes.error}`;
+      // 4. Finish Rendering if not cancelled
+      if (!isExportCancelled) {
+        statusText.textContent = "正在封闭封装 MP4 文件容器...";
+        const finishRes = await window.pywebview.api.finish_video_render();
+        if (finishRes.success) {
+          statusText.textContent = `✓ 导出完成！文件大小: ${finishRes.file_size_mb} MB`;
+          finishActions.style.display = 'flex';
+          this.toast('视频导出成功！', 'success');
+        } else {
+          statusText.textContent = `导出出错: ${finishRes.error}`;
+        }
       }
     });
 
@@ -2024,10 +2199,11 @@ class App {
     const codeBox = document.getElementById('generated-code-box');
     if (!codeBox) return;
 
+    const currentParams = this.mathNodes.evaluate(this.keyframes.evaluateAll(this.keyframes.currentTime));
     if (lang === 'threejs') {
-      codeBox.textContent = CodeGenerator.generateThreeJsHtml(this.activeSetup);
+      codeBox.textContent = CodeGenerator.generateThreeJsHtml(this.activeSetup, currentParams);
     } else {
-      codeBox.textContent = CodeGenerator.generatePythonMatplotlib(this.activeSetup);
+      codeBox.textContent = CodeGenerator.generatePythonMatplotlib(this.activeSetup, currentParams);
     }
   }
 
@@ -2035,14 +2211,6 @@ class App {
   // Preferences & Viewport Controls
   // --------------------------------------------------------------------------
   initPreferencesControls() {
-    document.getElementById('pref-axes-toggle').addEventListener('change', (e) => {
-      this.viewport.toggleAxes(e.target.checked);
-    });
-
-    document.getElementById('pref-grid-toggle').addEventListener('change', (e) => {
-      this.viewport.toggleGrid(e.target.checked);
-    });
-
     // Viewport HUD buttons
     document.getElementById('view-iso-btn').addEventListener('click', () => {
       this.viewport.resetCamera('iso');
@@ -2055,12 +2223,6 @@ class App {
     document.getElementById('view-front-btn').addEventListener('click', () => {
       this.viewport.resetCamera('front');
       this.setActiveHudBtn('view-front-btn');
-    });
-    document.getElementById('hud-wireframe-btn').addEventListener('click', () => {
-      const curr = this.viewport.options.wireframe;
-      this.viewport.toggleWireframe(!curr);
-      document.getElementById('wireframe-toggle').checked = !curr;
-      this.renderCurrentFrame(this.keyframes.currentTime, this.keyframes.evaluateAll(this.keyframes.currentTime));
     });
   }
 
@@ -2110,6 +2272,7 @@ class App {
 
     document.getElementById('cam-frame-all-btn').addEventListener('click', () => {
       this.viewport.frameAll();
+      this.syncViewportZoom();
       this.syncCameraPanel();
     });
 
@@ -2124,6 +2287,296 @@ class App {
         pending = true;
         requestAnimationFrame(() => { pending = false; this.syncCameraPanel(); });
       });
+    }
+  }
+
+  initWorkspaceControls() {
+    const viewTabs = document.querySelectorAll('[data-view-tab]');
+    const timelineTabs = document.querySelectorAll('[data-timeline-tab]');
+    const activate = (buttons, active) => buttons.forEach(button => {
+      button.classList.toggle('active', button === active);
+      button.setAttribute('aria-pressed', String(button === active));
+    });
+
+    viewTabs.forEach(button => button.addEventListener('click', () => {
+      activate(viewTabs, button);
+      const workspace = button.dataset.viewTab;
+      if (workspace !== 'algebra') this.mathNodes.closeMenu();
+      for (const name of ['view', 'algebra', 'geometry']) {
+        document.getElementById(`workspace-${name}`).hidden = name !== workspace;
+      }
+      document.querySelector('.viewport-settings').hidden = workspace !== 'view';
+      if (workspace === 'algebra') this.orthographicViews.refresh();
+      if (workspace === 'geometry') this.meshWorkspace.show();
+    }));
+
+    timelineTabs.forEach(button => button.addEventListener('click', () => {
+      activate(timelineTabs, button);
+      this.timelineEditor.setCurveMode(button.dataset.timelineTab === 'curve');
+    }));
+
+    const zoom = document.getElementById('viewport-zoom');
+    zoom.addEventListener('input', () => {
+      this.viewport.setZoom(Number(zoom.value) / 100);
+      this.syncViewportZoom();
+    });
+    this.viewport.controls.addEventListener('change', () => this.syncViewportZoom());
+
+    const geometry = document.getElementById('geometry-attributes');
+    const layerButton = document.getElementById('layer-object-btn');
+    const layerDetails = document.getElementById('layer-details');
+    layerButton.addEventListener('click', () => {
+      const expanded = layerDetails.hidden;
+      layerDetails.hidden = !expanded;
+      layerButton.setAttribute('aria-expanded', String(expanded));
+    });
+    document.getElementById('view-quality-btn').addEventListener('click', () => {
+      if (document.body.classList.contains('focus-3d')) document.body.classList.remove('focus-3d');
+      geometry.open = true;
+      document.getElementById('mesh-res-slider').focus();
+    });
+    document.getElementById('attribute-camera-btn').addEventListener('click', () => {
+      document.getElementById('camera-panel-toggle-btn').click();
+    });
+    document.getElementById('layer-visible').addEventListener('change', event => {
+      this.setLayerVisibility(event.target.checked);
+    });
+
+    this.viewport.bindViewGizmo(document.getElementById('viewport-gizmo'));
+    this.syncCameraPanel();
+  }
+
+  syncViewportZoom() {
+    const percent = Math.round(this.viewport.camera.zoom * 100);
+    document.getElementById('viewport-zoom').value = percent;
+    document.getElementById('viewport-zoom-value').value = `${percent}%`;
+  }
+
+  setLayerVisibility(visible) {
+    document.getElementById('layer-visible').checked = visible;
+    this.viewport.plotGroup.visible = visible;
+    this.viewport.epicycleGroup.visible = visible;
+    this.updateShadingLegend();
+  }
+
+  initViewportDisplayControls() {
+    const element = id => document.getElementById(id);
+    this.viewportMenus = [element('overlay-menu'), element('shading-menu')];
+    this.viewportMenus.forEach(menu => {
+      menu.addEventListener('toggle', () => {
+        if (menu.open) this.viewportMenus.forEach(other => { if (other !== menu) other.open = false; });
+      });
+    });
+    document.addEventListener('pointerdown', event => {
+      this.viewportMenus.forEach(menu => { if (!menu.contains(event.target)) menu.open = false; });
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key !== 'Escape') return;
+      this.viewportMenus.forEach(menu => {
+        if (!menu.open) return;
+        menu.open = false;
+        menu.querySelector('summary').focus();
+      });
+    });
+    element('attribute-shading-btn').addEventListener('click', () => this.openViewportSettings('shading-menu'));
+
+    const guideControls = element('guide-controls');
+    this.guideInputs = [...guideControls.querySelectorAll('[data-guide], [data-axis-guide], [data-cursor-axis]')];
+    guideControls.addEventListener('change', event => {
+      const input = event.target;
+      const { guide, axisGuide, cursorAxis } = input.dataset;
+      const current = this.viewport.guides.settings;
+      if (input.type === 'number' && (!Number.isFinite(input.valueAsNumber) || !input.checkValidity())) {
+        this.syncGuideControls();
+        return;
+      }
+      if (guide) {
+        const value = input.type === 'checkbox' ? input.checked
+          : input.tagName === 'SELECT' ? input.value : input.valueAsNumber;
+        this.viewport.configureGuides({ ...current, [guide]: value });
+      } else if (axisGuide !== undefined) {
+        const axes = [...current.axes];
+        axes[Number(axisGuide)] = input.checked;
+        this.viewport.configureGuides({ ...current, axes });
+      } else if (cursorAxis !== undefined) {
+        const position = [...current.cursorPosition];
+        position[Number(cursorAxis)] = input.valueAsNumber;
+        this.viewport.guides.setCursorPosition(position);
+      }
+      this.syncGuideControls();
+      this.updateShadingLegend();
+    });
+    element('cursor-reset').addEventListener('click', () => {
+      this.viewport.guides.setCursorPosition([0, 0, 0]);
+      this.syncGuideControls();
+    });
+    this.viewport.onCursorPlaced = () => this.syncGuideControls();
+
+    this.shadingControls = {
+      metric: element('property-metric'),
+      palette: element('colormap-select'),
+      rangeMode: element('color-range-mode'),
+      rangeForm: element('color-range-form'),
+      min: element('color-range-min'),
+      max: element('color-range-max'),
+      error: element('color-range-error'),
+      legendToggle: element('color-legend-toggle'),
+      legend: element('color-legend'),
+      legendName: element('color-legend-name'),
+      ramp: element('color-legend-ramp'),
+      legendMin: element('color-legend-min'),
+      legendMax: element('color-legend-max')
+    };
+    const controls = this.shadingControls;
+    const shading = this.viewport.shading;
+    const redraw = () => this.renderCurrentFrame(this.keyframes.currentTime, this.keyframes.evaluateAll(this.keyframes.currentTime));
+    controls.metric.addEventListener('change', () => {
+      this.shadingMetric = controls.metric.value;
+      this.syncShadingControls();
+      redraw();
+    });
+    controls.palette.addEventListener('change', () => {
+      shading.setPalette(controls.palette.value);
+      redraw();
+    });
+    controls.rangeMode.addEventListener('change', () => {
+      if (controls.rangeMode.value === 'auto') {
+        shading.manualRange = null;
+      } else {
+        const [min, max] = shading.dataRange || [0, 1];
+        const padding = Math.max(Math.abs(min) * 0.05, 0.01);
+        shading.manualRange = this.lastManualRange || (min < max ? [min, max] : [min - padding, max + padding]);
+      }
+      this.syncShadingControls(true);
+      redraw();
+    });
+    controls.rangeForm.addEventListener('submit', event => {
+      event.preventDefault();
+      const min = controls.min.valueAsNumber, max = controls.max.valueAsNumber;
+      const valid = Number.isFinite(min) && Number.isFinite(max) && min < max;
+      controls.error.hidden = valid;
+      if (!valid) return;
+      shading.manualRange = this.lastManualRange = [min, max];
+      redraw();
+    });
+    controls.legendToggle.addEventListener('change', () => {
+      this.showColorLegend = controls.legendToggle.checked;
+      this.updateShadingLegend();
+    });
+    this.restoreViewportDisplay();
+  }
+
+  openViewportSettings(id) {
+    this.showPage('studio');
+    document.querySelector('[data-view-tab="view"]').click();
+    this.viewportMenus.forEach(menu => { menu.open = menu.id === id; });
+    document.getElementById(id).querySelector('summary').focus();
+  }
+
+  restoreViewportDisplay(viewport) {
+    viewport ??= {};
+    const previousGuides = viewport.guides || {
+      floor: viewport.showGrid,
+      orthoGrid: viewport.showGrid,
+      axes: typeof viewport.showAxes === 'boolean' ? Array(3).fill(viewport.showAxes) : undefined,
+      wireMode: viewport.wireframe ? 'only' : 'off'
+    };
+    this.viewport.configureGuides(previousGuides);
+    this.viewport.shading.configure({ palette: viewport.colormap, range: viewport.shading?.range });
+    this.shadingMetric = viewport.shading?.metric || null;
+    this.lastManualRange = this.viewport.shading.manualRange;
+    this.showColorLegend = viewport.shading?.showLegend !== false;
+    this.syncGuideControls();
+    this.syncShadingControls(true);
+  }
+
+  syncGuideControls() {
+    const settings = this.viewport.guides.settings;
+    for (const input of this.guideInputs) {
+      const { guide, axisGuide, cursorAxis } = input.dataset;
+      if (axisGuide !== undefined) input.checked = settings.axes[Number(axisGuide)];
+      else if (cursorAxis !== undefined) input.value = Number(settings.cursorPosition[Number(cursorAxis)].toPrecision(8));
+      else if (input.type === 'checkbox') input.checked = settings[guide];
+      else input.value = settings[guide];
+    }
+    this.guideInputs.find(input => input.dataset.guide === 'wireMode').disabled = this.activeType === 'vector_field';
+    this.guideInputs.find(input => input.dataset.guide === 'wireOpacity').disabled =
+      this.activeType === 'vector_field' || settings.wireMode !== 'overlay';
+  }
+
+  currentShadingMetric() {
+    const metrics = propertyMetrics[this.activeType] || propertyMetrics.explicit;
+    return metrics.includes(this.shadingMetric) ? this.shadingMetric : metrics[0];
+  }
+
+  syncShadingControls(writeRange = false) {
+    const controls = this.shadingControls;
+    const { palette, manualRange } = this.viewport.shading;
+    const metric = this.currentShadingMetric();
+    const available = propertyMetrics[this.activeType] || propertyMetrics.explicit;
+    for (const option of controls.metric.options) option.disabled = !available.includes(option.value);
+    controls.metric.value = metric;
+    controls.palette.value = palette;
+    controls.rangeMode.value = manualRange ? 'manual' : 'auto';
+    controls.palette.disabled = controls.rangeMode.disabled = controls.legendToggle.disabled = metric === 'solid';
+    controls.rangeForm.hidden = !manualRange || metric === 'solid';
+    controls.legendToggle.checked = this.showColorLegend;
+    if (writeRange) {
+      controls.error.hidden = true;
+      [controls.min.value, controls.max.value] = manualRange || ['', ''];
+    }
+  }
+
+  updateShadingLegend() {
+    const controls = this.shadingControls;
+    const metric = this.currentShadingMetric();
+    const { displayRange, gradient } = this.viewport.shading;
+    controls.legend.hidden = !this.showColorLegend || metric === 'solid' || !this.viewport.plotGroup.visible ||
+      (this.activeType !== 'vector_field' && this.viewport.guides.settings.wireMode === 'only');
+    if (controls.legend.hidden) return;
+    const label = controls.metric.selectedOptions[0]?.textContent;
+    const format = value => {
+      const size = Math.abs(value);
+      return size && (size < 0.001 || size >= 10000)
+        ? value.toExponential(3) : legendNumberFormats[getLocale()].format(value);
+    };
+    const min = displayRange ? format(displayRange[0]) : '无有效数据';
+    const max = displayRange ? format(displayRange[1]) : '';
+    const key = JSON.stringify([label, gradient, min, max]);
+    if (key === this.legendKey) return;
+    this.legendKey = key;
+    controls.legendName.textContent = label;
+    controls.ramp.style.background = displayRange ? gradient : 'var(--workspace-divider)';
+    controls.legendMin.textContent = min;
+    controls.legendMax.textContent = max;
+  }
+
+  setTheme(theme, sceneColor = theme === 'light' ? 0xf5f5f5 : 0x060606) {
+    document.documentElement.setAttribute('data-theme', theme);
+    this.viewport.scene.background.setHex(sceneColor);
+    this.viewport.setGuideTheme(theme === 'light');
+    this.orthographicViews.refresh();
+    this.meshWorkspace.refresh();
+    this.timelineEditor.draw();
+  }
+
+  updateGeometryInfo() {
+    const { points, edges, faces } = this.viewport.geometryCounts;
+    const key = `${this.activeType}/${points}/${edges}/${faces}`;
+    if (key === this.geometryKey) return;
+    this.geometryKey = key;
+    const names = {
+      explicit: '显式曲面',
+      parametric_curve: '参数曲线',
+      parametric_surface: '参数曲面',
+      vector_field: '向量场'
+    };
+    document.getElementById('layer-object-name').textContent = names[this.activeType];
+    const counts = { points, edges, faces };
+    for (const [name, count] of Object.entries(counts)) {
+      const value = count.toLocaleString(getLocale());
+      document.getElementById(`geometry-${name}`).textContent = value;
+      document.getElementById(`layer-${name}`).textContent = value;
     }
   }
 
@@ -2155,50 +2608,50 @@ class App {
   initLayoutManager() {
     this.initSplitters();
     this.restoreLayout().then(() => this.applyLayout());
+    if (!this.isNative()) {
+      window.addEventListener('pywebviewready', async () => {
+        await this.restoreLayout();
+        this.applyLayout();
+      }, { once: true });
+    }
   }
 
   initSplitters() {
-    this.makeResizable('sidebar-splitter', 'sidebar', 'x', 200, 460, (v) => { this.layout.sidebar = v; });
-    this.makeResizable('content-splitter', 'settings-scroll-pane', 'x', 360, 780, (v) => { this.layout.content = v; });
-    this.makeResizable('timeline-splitter', 'timeline-panel', 'y', 140, 520, (v) => { this.layout.timeline = v; });
+    this.makeResizable('sidebar-splitter', 'sidebar', 'leftWidth', '--left-width', 'x', 1, 154, 360);
+    this.makeResizable('content-splitter', 'attribute-panel', 'attributeWidth', '--attribute-width', 'x', -1, 152, 320);
+    this.makeResizable('timeline-splitter', 'workspace-bottom', 'bottomHeight', '--bottom-height', 'y', -1, 140, 520);
+    const bottom = document.getElementById('workspace-bottom');
+    this.makeResizable('layer-timeline-splitter', 'layer-panel', 'layerWidthPercent', '--layer-width', 'x', 1, 0, 100, bottom);
   }
 
-  makeResizable(splitterId, paneId, axis, min, max, onSet) {
+  makeResizable(splitterId, paneId, key, property, axis, direction, min, max, relativeTo) {
     const splitter = document.getElementById(splitterId);
     const pane = document.getElementById(paneId);
-    if (!splitter || !pane) return;
-    splitter.addEventListener('pointerdown', (e) => {
-      e.preventDefault();
+    const workspace = document.getElementById('workspace');
+    splitter.addEventListener('pointerdown', event => {
+      if (event.button !== 0) return;
+      event.preventDefault();
       splitter.classList.add('dragging');
-      splitter.setPointerCapture(e.pointerId);
-      const startX = e.clientX;
-      const startY = e.clientY;
-      const startSize = axis === 'x' ? pane.getBoundingClientRect().width : pane.getBoundingClientRect().height;
+      splitter.setPointerCapture(event.pointerId);
+      const start = axis === 'x' ? event.clientX : event.clientY;
+      const startSize = axis === 'x' ? pane.offsetWidth : pane.offsetHeight;
 
-      const onMove = (ev) => {
-        let size;
-        if (axis === 'x') {
-          size = startSize + (ev.clientX - startX);
-        } else {
-          size = startSize - (ev.clientY - startY);
-        }
-        size = Math.max(min, Math.min(max, size));
-        if (axis === 'x') pane.style.width = size + 'px';
-        else pane.style.height = size + 'px';
-        onSet(size);
+      const move = pointer => {
+        const coord = axis === 'x' ? pointer.clientX : pointer.clientY;
+        const pixels = startSize + direction * (coord - start);
+        const value = relativeTo ? 100 * pixels / relativeTo.clientWidth : pixels;
+        const size = Math.max(min, Math.min(max, value));
+        this.layout[key] = size;
+        (relativeTo || workspace).style.setProperty(property, `${size}${relativeTo ? '%' : 'px'}`);
       };
-
-      const onUp = () => {
+      const finish = () => {
         splitter.classList.remove('dragging');
-        splitter.removeEventListener('pointermove', onMove);
-        splitter.removeEventListener('pointerup', onUp);
-        splitter.removeEventListener('pointercancel', onUp);
+        splitter.removeEventListener('pointermove', move);
+        splitter.removeEventListener('lostpointercapture', finish);
         this.saveLayout(false);
       };
-
-      splitter.addEventListener('pointermove', onMove);
-      splitter.addEventListener('pointerup', onUp);
-      splitter.addEventListener('pointercancel', onUp);
+      splitter.addEventListener('pointermove', move);
+      splitter.addEventListener('lostpointercapture', finish);
     });
   }
 
@@ -2208,10 +2661,12 @@ class App {
       data = await this.nativeCall('load_layout', []);
     }
     if (!data || typeof data !== 'object') {
-      try { data = JSON.parse(localStorage.getItem('mathstudio_layout_v1') || 'null'); } catch (e) { data = null; }
+      try { data = JSON.parse(localStorage.getItem('mathstudio_layout_v2') || localStorage.getItem('mathstudio_layout_v1') || 'null'); } catch (e) { data = null; }
     }
-    if (data && typeof data === 'object') {
-      this.layout = Object.assign({}, this.layoutDefaults, data);
+    if (data?.version === 2) {
+      this.layout = { ...this.layoutDefaults, ...data };
+    } else if (data?.cameraPanel === true) {
+      this.layout.cameraPanel = true;
     }
   }
 
@@ -2221,19 +2676,31 @@ class App {
     if (this.isNative()) {
       await this.nativeCall('save_layout', [layout]);
     }
-    try { localStorage.setItem('mathstudio_layout_v1', JSON.stringify(layout)); } catch (e) {}
+    try { localStorage.setItem('mathstudio_layout_v2', JSON.stringify(layout)); } catch (e) {}
     if (showToast) this.toast('工作区布局已保存', 'success');
   }
 
   applyLayout() {
-    const sidebar = document.getElementById('sidebar');
-    const content = document.getElementById('settings-scroll-pane');
-    const timeline = document.getElementById('timeline-panel');
-    if (sidebar) sidebar.style.width = this.layout.sidebar + 'px';
-    if (content) content.style.width = this.layout.content + 'px';
-    if (timeline) timeline.style.height = this.layout.timeline + 'px';
+    const workspace = document.getElementById('workspace');
+    for (const [key, property] of [
+      ['leftWidth', '--left-width'],
+      ['attributeWidth', '--attribute-width'],
+      ['bottomHeight', '--bottom-height']
+    ]) {
+      if (Number.isFinite(this.layout[key]) && this.layout[key] > 0) {
+        workspace.style.setProperty(property, `${this.layout[key]}px`);
+      }
+    }
+    const bottom = document.getElementById('workspace-bottom');
+    const widthPercent = this.layout.layerWidthPercent;
+    if (Number.isFinite(widthPercent) && widthPercent >= 0 && widthPercent <= 100) {
+      bottom.style.setProperty('--layer-width', `${widthPercent}%`);
+    } else {
+      bottom.style.removeProperty('--layer-width');
+    }
     const panel = document.getElementById('camera-panel');
-    if (panel) panel.style.display = this.layout.cameraPanel ? 'block' : 'none';
+    panel.style.display = this.layout.cameraPanel ? 'block' : 'none';
+    if (this.layout.cameraPanel) this.syncCameraPanel();
   }
 
   // --------------------------------------------------------------------------
@@ -2296,34 +2763,66 @@ class App {
     this.renderCurrentFrame(t, scope);
   }
 
+  invalidateCompiledFunction() {
+    this._compiledFn = null;
+    this._compiledType = null;
+  }
+
+  getCompiledFunction() {
+    if (this._compiledFn && this._compiledType === this.activeType) {
+      return this._compiledFn;
+    }
+    this._compiledType = this.activeType;
+    if (this.activeType === 'explicit') {
+      this._compiledFn = this.parser.compileExplicit(this.activeSetup.expr);
+    } else if (this.activeType === 'parametric_curve') {
+      this._compiledFn = this.parser.compileParametricCurve(this.activeSetup.exprX, this.activeSetup.exprY, this.activeSetup.exprZ);
+    } else if (this.activeType === 'parametric_surface') {
+      this._compiledFn = this.parser.compileParametricSurface(this.activeSetup.exprX, this.activeSetup.exprY, this.activeSetup.exprZ);
+    } else if (this.activeType === 'vector_field') {
+      this._compiledFn = this.parser.compileVectorField(this.activeSetup.vecU, this.activeSetup.vecV, this.activeSetup.vecW);
+    }
+    return this._compiledFn;
+  }
+
   // --------------------------------------------------------------------------
   // 3D Frame Render Evaluation
   // --------------------------------------------------------------------------
   renderCurrentFrame(t, scope) {
+    scope = this.mathNodes.evaluate(scope);
+    const fn = this.getCompiledFunction();
+    const metric = this.currentShadingMetric();
+    const resolution = Math.max(20, Math.min(140, Math.round(Number(this.activeSetup.meshRes)) || 70));
+    if (this.displayedPlotType !== this.activeType) {
+      this.displayedPlotType = this.activeType;
+      this.syncGuideControls();
+      this.syncShadingControls();
+    }
     if (this.activeType === 'explicit') {
-      const fn = this.parser.compileExplicit(this.activeSetup.expr);
       this.viewport.plotExplicitSurface(
         (x, y) => fn(x, y, scope),
         this.activeSetup.xRange,
         this.activeSetup.yRange,
-        this.activeSetup.meshRes,
-        this.activeSetup.meshRes
+        resolution,
+        resolution,
+        metric
       );
     } else if (this.activeType === 'parametric_curve') {
-      const fn = this.parser.compileParametricCurve(this.activeSetup.exprX, this.activeSetup.exprY, this.activeSetup.exprZ);
-      this.viewport.plotParametricCurve((u) => fn(u, scope), this.activeSetup.uRange, 400);
+      this.viewport.plotParametricCurve((u) => fn(u, scope), this.activeSetup.uRange, 400, metric);
     } else if (this.activeType === 'parametric_surface') {
-      const fn = this.parser.compileParametricSurface(this.activeSetup.exprX, this.activeSetup.exprY, this.activeSetup.exprZ);
-      this.viewport.plotParametricSurface((u, v) => fn(u, v, scope), this.activeSetup.uRange, this.activeSetup.vRange, 50, 50);
+      this.viewport.plotParametricSurface((u, v) => fn(u, v, scope), this.activeSetup.uRange, this.activeSetup.vRange, resolution, resolution, metric);
     } else if (this.activeType === 'vector_field') {
-      const fn = this.parser.compileVectorField(this.activeSetup.vecU, this.activeSetup.vecV, this.activeSetup.vecW);
-      this.viewport.plotVectorField((x, y, z) => fn(x, y, z, scope), 4, 1.8);
+      this.viewport.plotVectorField((x, y, z) => fn(x, y, z, scope), 4, 1.8, metric);
     }
+
+    this.updateGeometryInfo();
+    this.updateShadingLegend();
 
     // Render Fourier Epicycles if active
     if (this.fourierEpicyclesActive && this.activeHarmonics.length > 0) {
       this.viewport.renderFourierEpicycles(this.activeHarmonics, t);
     }
+    this.orthographicViews.refresh();
   }
 }
 

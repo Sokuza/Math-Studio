@@ -31,9 +31,10 @@ export class TimelineEditor {
     // Layout constants (CSS px)
     this.gutterWidth = 92;
     this.rightPad = 18;
-    this.rulerHeight = 26;
-    this.trackHeight = 48;
-    this.trackGap = 6;
+    this.rulerHeight = 20;
+    this.curveMode = false;
+    this.trackHeight = 28;
+    this.trackGap = 2;
     this.padTop = 4;
 
     this.playheadTime = keyframes.currentTime;
@@ -42,7 +43,7 @@ export class TimelineEditor {
 
     this._cssW = 0;
     this._cssH = 0;
-    this._interaction = null; // { type: 'scrub' | 'keyframe', param, idx }
+    this._interaction = null;
 
     this.bindEvents();
 
@@ -51,6 +52,12 @@ export class TimelineEditor {
       new ResizeObserver(() => this.refresh()).observe(this.container);
     }
 
+    this.refresh();
+  }
+
+  setCurveMode(enabled) {
+    this.curveMode = enabled;
+    this.trackHeight = enabled ? 48 : 28;
     this.refresh();
   }
 
@@ -100,6 +107,7 @@ export class TimelineEditor {
   }
 
   yForValue(v, range, trackTop) {
+    if (!this.curveMode) return trackTop + this.trackHeight / 2;
     const span = range.max - range.min || 1;
     return trackTop + this.trackHeight - ((v - range.min) / span) * this.trackHeight;
   }
@@ -147,13 +155,22 @@ export class TimelineEditor {
     if (!ctx || w === 0) return;
 
     ctx.clearRect(0, 0, w, h);
+    const style = getComputedStyle(this.container);
+    this.colors = {
+      panel: style.getPropertyValue('--workspace-panel'),
+      inset: style.getPropertyValue('--workspace-inset'),
+      divider: style.getPropertyValue('--workspace-divider'),
+      text: style.getPropertyValue('--win-text-primary'),
+      muted: style.getPropertyValue('--win-text-secondary'),
+      highlight: style.getPropertyValue('--workspace-selected')
+    };
 
     // Background
-    ctx.fillStyle = '#151515';
+    ctx.fillStyle = this.colors.panel;
     ctx.fillRect(0, 0, w, h);
 
     // Gutter background
-    ctx.fillStyle = '#1b1b1b';
+    ctx.fillStyle = this.colors.panel;
     ctx.fillRect(0, 0, this.gutterWidth, h);
 
     this.drawRuler(ctx, w);
@@ -165,11 +182,11 @@ export class TimelineEditor {
   drawRuler(ctx, w) {
     const top = this.padTop;
     const bottom = top + this.rulerHeight;
-    ctx.fillStyle = '#1f1f1f';
+    ctx.fillStyle = this.colors.inset;
     ctx.fillRect(this.gutterWidth, top, w - this.gutterWidth, this.rulerHeight);
 
-    ctx.strokeStyle = '#333';
-    ctx.fillStyle = '#9a9a9a';
+    ctx.strokeStyle = this.colors.divider;
+    ctx.fillStyle = this.colors.muted;
     ctx.font = '10px "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
@@ -185,7 +202,7 @@ export class TimelineEditor {
       ctx.stroke();
       ctx.fillText(t.toFixed(1) + 's', x, top + 7);
     }
-    ctx.strokeStyle = '#2c2c2c';
+    ctx.strokeStyle = this.colors.divider;
     ctx.beginPath();
     ctx.moveTo(this.gutterWidth, bottom);
     ctx.lineTo(w, bottom);
@@ -199,11 +216,11 @@ export class TimelineEditor {
     if (!param) return;
 
     // Lane background (alternate slightly)
-    ctx.fillStyle = (index % 2 === 0) ? '#181818' : '#1a1a1a';
+    ctx.fillStyle = index % 2 === 0 ? this.colors.inset : this.colors.panel;
     ctx.fillRect(this.gutterWidth, top, w - this.gutterWidth, this.trackHeight);
 
     // Divider
-    ctx.strokeStyle = '#262626';
+    ctx.strokeStyle = this.colors.divider;
     ctx.beginPath();
     ctx.moveTo(this.gutterWidth, bottom);
     ctx.lineTo(w, bottom);
@@ -213,45 +230,49 @@ export class TimelineEditor {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.font = 'bold 11px "Consolas", monospace';
-    ctx.fillStyle = '#7dd0ff';
-    ctx.fillText(name, 10, top + 16);
+    ctx.fillStyle = this.colors.text;
+    ctx.fillText(name, 10, top + (this.curveMode ? 16 : 14));
     ctx.font = '10px "Consolas", monospace';
-    ctx.fillStyle = '#a0a0a0';
+    ctx.fillStyle = this.colors.muted;
     const liveVal = this.keyframes.evaluateParameter(name, this.playheadTime);
     const live = isFinite(liveVal) ? liveVal.toFixed(2) : '--';
-    ctx.fillText(live, 10, top + 32);
+    ctx.fillText(live, this.curveMode ? 10 : 54, top + (this.curveMode ? 32 : 14));
 
-    // Value range labels
-    const range = this.valueRange(param);
-    ctx.fillStyle = '#6a6a6a';
-    ctx.font = '9px "Consolas", monospace';
-    ctx.textAlign = 'right';
-    ctx.fillText(range.max.toFixed(1), this.gutterWidth - 6, top + 4);
-    ctx.fillText(range.min.toFixed(1), this.gutterWidth - 6, bottom - 4);
+    const drag = this._interaction;
+    const range = drag?.type === 'keyframe' && drag.param === name && drag.range
+      ? drag.range : this.valueRange(param);
+    if (this.curveMode) {
+      // Value range labels
+      ctx.fillStyle = this.colors.muted;
+      ctx.font = '9px "Consolas", monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText(range.max.toFixed(1), this.gutterWidth - 6, top + 4);
+      ctx.fillText(range.min.toFixed(1), this.gutterWidth - 6, bottom - 4);
 
-    // Center reference line
-    ctx.strokeStyle = '#242424';
-    ctx.setLineDash([3, 3]);
-    ctx.beginPath();
-    ctx.moveTo(this.gutterWidth, top + this.trackHeight / 2);
-    ctx.lineTo(w, top + this.trackHeight / 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
+      // Center reference line
+      ctx.strokeStyle = this.colors.divider;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(this.gutterWidth, top + this.trackHeight / 2);
+      ctx.lineTo(w, top + this.trackHeight / 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
 
-    // Value curve
-    const samples = 140;
-    ctx.strokeStyle = '#ff9d2e';
-    ctx.lineWidth = 1.8;
-    ctx.beginPath();
-    for (let i = 0; i <= samples; i++) {
-      const t = (i / samples) * (this.keyframes.duration || 1);
-      const v = this.keyframes.evaluateParameter(name, t);
-      const x = this.xForTime(t);
-      const y = this.yForValue(v, range, top);
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+      // Value curve
+      const samples = 140;
+      ctx.strokeStyle = this.colors.muted;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      for (let i = 0; i <= samples; i++) {
+        const t = (i / samples) * (this.keyframes.duration || 1);
+        const v = this.keyframes.evaluateParameter(name, t);
+        const x = this.xForTime(t);
+        const y = this.yForValue(v, range, top);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
     }
-    ctx.stroke();
 
     // Keyframes
     param.keyframes.forEach((kf, idx) => {
@@ -264,9 +285,9 @@ export class TimelineEditor {
       ctx.lineTo(x, y + 5);
       ctx.lineTo(x - 5, y);
       ctx.closePath();
-      ctx.fillStyle = selected ? '#ffffff' : '#ff9d2e';
+      ctx.fillStyle = selected ? this.colors.text : this.colors.muted;
       ctx.fill();
-      ctx.strokeStyle = selected ? '#0078d4' : '#8a4a00';
+      ctx.strokeStyle = selected ? this.colors.text : this.colors.highlight;
       ctx.lineWidth = 1.5;
       ctx.stroke();
     });
@@ -296,7 +317,7 @@ export class TimelineEditor {
         const x = this.xForTime(kf.time);
         const y = this.yForValue(kf.value, range, top);
         if (Math.abs(px - x) <= 9 && Math.abs(py - y) <= 9) {
-          return { param: name, idx, kf };
+          return { param: name, idx, kf, x, y, range, top };
         }
       }
       return { param: name, idx: -1, kf: null };
@@ -320,29 +341,36 @@ export class TimelineEditor {
 
   bindEvents() {
     this.canvas.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || this._interaction) return;
       e.preventDefault();
       const { x, y } = this.pointerPos(e);
       this.canvas.setPointerCapture(e.pointerId);
 
-      const inRuler = y < (this.padTop + this.rulerHeight);
-      if (inRuler) {
-        this._interaction = { type: 'scrub' };
-        this.scrubTo(x);
-        return;
-      }
-
-      const hit = this.hitTestKeyframe(x, y);
-      if (hit && hit.kf) {
+      const hit = y >= this.padTop + this.rulerHeight ? this.hitTestKeyframe(x, y) : null;
+      if (hit?.kf) {
         this.selectedParam = hit.param;
         this.selectedKeyframeIdx = hit.idx;
+        // The value scale is fixed until release. Including the in-progress keyframe
+        // in every new range would let it expand the scale on the next pointer move.
+        this._interaction = {
+          type: 'keyframe',
+          pointerId: e.pointerId,
+          param: hit.param,
+          keyframe: hit.kf,
+          range: this.curveMode ? hit.range : null,
+          trackTop: hit.top,
+          offsetX: x - hit.x,
+          offsetY: y - hit.y,
+          moved: false
+        };
         this.onSelect(hit.param, hit.idx);
-        this._interaction = { type: 'keyframe', param: hit.param, idx: hit.idx, moved: false };
         this.draw();
       } else {
-        this._interaction = { type: 'scrub' };
+        this._interaction = { type: 'scrub', pointerId: e.pointerId };
         this.scrubTo(x);
-        if (hit && hit.param) {
+        if (hit?.param) {
           this.selectedParam = hit.param;
+          this.selectedKeyframeIdx = -1;
           this.onSelect(hit.param, -1);
           this.draw();
         }
@@ -350,36 +378,48 @@ export class TimelineEditor {
     });
 
     this.canvas.addEventListener('pointermove', (e) => {
-      if (!this._interaction) return;
+      const drag = this._interaction;
+      if (!drag || e.pointerId !== drag.pointerId) return;
       const { x, y } = this.pointerPos(e);
-      if (this._interaction.type === 'scrub') {
+      if (drag.type === 'scrub') {
         this.scrubTo(x);
-      } else if (this._interaction.type === 'keyframe') {
-        const param = this.keyframes.parameters[this._interaction.param];
-        if (!param) return;
-        const kf = param.keyframes[this._interaction.idx];
-        if (!kf) return;
-        const range = this.valueRange(param);
-        const top = this.trackTop(this.getTrackNames().indexOf(this._interaction.param));
-        kf.time = this.timeForX(x);
-        kf.value = Math.max(range.min, Math.min(range.max, this.valueForY(y, range, top)));
-        // Keep keyframes sorted while dragging.
-        param.keyframes.sort((a, b) => a.time - b.time);
-        this._interaction.moved = true;
-        this.draw();
+        return;
       }
+
+      const keyframes = this.keyframes.parameters[drag.param]?.keyframes;
+      const keyframe = drag.keyframe;
+      if (!keyframes?.includes(keyframe)) return;
+
+      const time = this.timeForX(x - drag.offsetX);
+      let value = keyframe.value;
+      if (drag.range) {
+        const { min, max } = drag.range;
+        const candidate = this.valueForY(y - drag.offsetY, drag.range, drag.trackTop);
+        if (Number.isFinite(candidate)) value = Math.max(min, Math.min(max, candidate));
+      }
+
+      if (!Number.isFinite(time) || (time === keyframe.time && value === keyframe.value)) return;
+      keyframe.time = time;
+      keyframe.value = value;
+      keyframes.sort((a, b) => a.time - b.time);
+      this.selectedKeyframeIdx = keyframes.indexOf(keyframe);
+      drag.moved = true;
+      this.draw();
     });
 
     const finish = (e) => {
-      if (!this._interaction) return;
-      const inter = this._interaction;
+      const drag = this._interaction;
+      if (!drag || e.pointerId !== drag.pointerId) return;
       this._interaction = null;
-      if (inter.type === 'keyframe' && inter.moved) {
-        this.onKeyframeChanged(inter.param, inter.idx);
-      }
+      if (drag.type !== 'keyframe' || !drag.moved) return;
+
+      const idx = this.keyframes.parameters[drag.param]?.keyframes.indexOf(drag.keyframe);
+      if (idx >= 0) this.onKeyframeChanged(drag.param, idx);
+      this.draw();
     };
     this.canvas.addEventListener('pointerup', finish);
     this.canvas.addEventListener('pointercancel', finish);
+    this.canvas.addEventListener('lostpointercapture', finish);
 
     this.canvas.addEventListener('dblclick', (e) => {
       const { x, y } = this.pointerPos(e);

@@ -107,6 +107,22 @@ class VideoExporter:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    def cancel_recording(self) -> dict:
+        """Abort active ffmpeg recording and clean up partial file."""
+        if self.current_process:
+            try:
+                self.current_process.kill()
+            except Exception:
+                pass
+            self.current_process = None
+        if self.output_file and os.path.exists(self.output_file):
+            try:
+                os.remove(self.output_file)
+            except Exception:
+                pass
+        self.output_file = None
+        return {"success": True}
+
     def convert_webm_to_mp4(self, webm_bytes: bytes, output_path: str) -> dict:
         """Convert a WebM container video directly to standard MP4."""
         temp_webm = output_path + ".temp.webm"

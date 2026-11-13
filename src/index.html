@@ -3,9 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Math Studio - Windows 11 Fluent Edition</title>
+  <title>Math Studio</title>
   <link rel="icon" type="image/png" href="./app_icon.png">
   <link rel="stylesheet" href="./styles/win11_settings.css">
+  <link rel="stylesheet" href="./styles/math_nodes.css">
   <link rel="stylesheet" href="./lib/katex.min.css">
 </head>
 <body>
@@ -16,7 +17,7 @@
     <div class="menubar-left">
       <!-- 1. Math-Studio Menu -->
       <div class="menu-item" id="menu-math-studio">
-        <span class="menu-label brand"><span class="brand-m-mini">M</span> Math-Studio</span>
+        <span class="menu-label brand"><img class="brand-icon" src="./app_icon.png" width="15" height="15" alt="">Math Studio <span class="app-version">v2.1.0</span></span>
         <div class="menu-dropdown">
           <div class="menu-option" data-action="mathstudio-about">
             <span class="opt-label">About (关于)</span>
@@ -141,7 +142,7 @@
             <span class="opt-label">Layout (界面布局)</span>
             <span class="opt-arrow">▶</span>
             <div class="menu-sub-dropdown">
-              <div class="menu-option" data-action="layout-split"><span class="opt-label">经典双栏模式 (工作台+3D视口)</span></div>
+              <div class="menu-option" data-action="layout-split"><span class="opt-label">工作台布局 (Workspace)</span></div>
               <div class="menu-option" data-action="layout-fullscreen-3d"><span class="opt-label">纯净 3D 沉浸模式 (收起面板)</span></div>
               <div class="menu-divider"></div>
               <div class="menu-option" data-action="layout-home"><span class="opt-label">切换至项目主页 (Resource Hub)</span></div>
@@ -152,8 +153,8 @@
             <span class="opt-label">Theme (外观主题)</span>
             <span class="opt-arrow">▶</span>
             <div class="menu-sub-dropdown">
-              <div class="menu-option" data-action="theme-dark"><span class="opt-label">Windows 11 深色模式 (Dark Mica)</span></div>
-              <div class="menu-option" data-action="theme-light"><span class="opt-label">Windows 11 浅色模式 (Light Mica)</span></div>
+              <div class="menu-option" data-action="theme-dark"><span class="opt-label">深色模式 (Dark)</span></div>
+              <div class="menu-option" data-action="theme-light"><span class="opt-label">浅色模式 (Light)</span></div>
               <div class="menu-option" data-action="theme-black"><span class="opt-label">纯黑赛博专注模式 (Pure Black)</span></div>
             </div>
           </div>
@@ -171,14 +172,11 @@
             </div>
           </div>
           <div class="menu-divider"></div>
-          <div class="menu-option" data-action="view-wireframe-toggle">
-            <span class="opt-label">切换网格线框 (Wireframe)</span>
+          <div class="menu-option" data-action="view-overlays">
+            <span class="opt-label">视口显示</span>
           </div>
-          <div class="menu-option" data-action="view-axes-toggle">
-            <span class="opt-label">切换三维坐标矢量轴</span>
-          </div>
-          <div class="menu-option" data-action="view-grid-toggle">
-            <span class="opt-label">切换水平基准网格</span>
+          <div class="menu-option" data-action="view-shading">
+            <span class="opt-label">属性着色</span>
           </div>
         </div>
       </div>
@@ -216,13 +214,28 @@
       </div>
     </div>
 
-    <!-- Center: Active Project Pill -->
+    <nav class="workspace-nav" aria-label="工作台工具">
+      <button class="workspace-menu-button" id="workspace-home-btn" type="button" aria-label="项目主页" title="项目主页"><span aria-hidden="true"></span></button>
+      <button class="nav-item active" type="button" data-target="studio" title="表达式与 3D 工作台">Fx&amp;3D</button>
+      <button class="nav-item" type="button" data-target="keyframes" title="关键帧与动画">Key</button>
+      <button class="nav-item" type="button" data-target="calculus" title="微积分与高等数学">Math</button>
+      <button class="nav-item" type="button" data-target="presets" title="函数预设">Preset</button>
+      <button class="nav-item" type="button" data-target="export" title="代码与视频导出">Code</button>
+      <button class="nav-item" type="button" data-target="preferences" title="工作台设置">Set</button>
+    </nav>
+
+    <!-- Active project -->
     <div class="menubar-center">
-      <div class="current-project-pill" id="menubar-project-pill" title="点击重命名当前项目">
-        <span class="project-pill-dot"></span>
+      <button class="current-project-pill" id="menubar-project-pill" type="button" title="点击重命名当前项目">
         <span id="menubar-project-name">未命名项目</span>
-      </div>
+      </button>
     </div>
+
+    <form class="function-search" id="function-search">
+      <input type="search" id="nav-search-input" list="function-search-options" aria-label="搜索函数预设" placeholder="Search functions" autocomplete="off">
+      <datalist id="function-search-options"></datalist>
+      <button type="submit" aria-label="搜索函数预设" title="搜索函数预设"><span aria-hidden="true"></span></button>
+    </form>
 
     <!-- Right: Quick actions & Window Controls (Minimalist monochrome vector icons) -->
     <div class="menubar-right">
@@ -259,10 +272,10 @@
   <!-- ====================================================================
        Page 1: Project Resource Window (项目资源窗口)
        ==================================================================== -->
-  <div id="page-home" class="app-page active">
+  <div id="page-home" class="app-page">
     <div class="home-container">
       <div class="home-header">
-        <div class="home-logo" style="font-family: 'Times New Roman', Georgia, Cambria, serif; font-weight: bold;">M</div>
+        <img class="home-logo app-logo" src="./app_icon.png" width="54" height="54" alt="">
         <div>
           <h1>Math Studio</h1>
           <p>数学函数与动画可视化工具</p>
@@ -298,129 +311,30 @@
   <!-- ====================================================================
        Page 2: Math Studio (第二页面)
        ==================================================================== -->
-  <div id="page-studio" class="app-page">
-  <div class="app-container">
-
-    <!-- ====================================================================
-         Windows 11 Left Navigation Rail (Sidebar)
-         ==================================================================== -->
-    <aside class="sidebar" id="sidebar">
-      <div class="sidebar-header">
-        <div class="app-icon" style="font-family: 'Times New Roman', Georgia, Cambria, serif; font-size: 24px; font-weight: bold; background: linear-gradient(135deg, #0078d4, #004578); box-shadow: 0 4px 12px rgba(0, 120, 212, 0.4);">
-          <span>M</span>
-        </div>
-        <div class="app-title-group">
-          <h1>Math Studio</h1>
-          <p>Windows Fluent Edition</p>
-        </div>
-      </div>
-
-      <div class="sidebar-search">
-        <div class="win11-search-box">
-          <span class="search-icon">🔍</span>
-          <input type="text" id="nav-search-input" placeholder="查找设置或函数...">
-        </div>
-      </div>
-
-      <nav class="sidebar-nav">
-        <div class="nav-item active" data-target="studio">
-          <span class="nav-icon">📊</span>
-          <span class="nav-label">表达式与3D工作台</span>
-        </div>
-        <div class="nav-item" data-target="keyframes">
-          <span class="nav-icon">⏱️</span>
-          <span class="nav-label">关键帧与复合函数动画</span>
-        </div>
-        <div class="nav-item" data-target="calculus">
-          <span class="nav-icon">📐</span>
-          <span class="nav-label">微积分与高等数学</span>
-        </div>
-        <div class="nav-item" data-target="presets">
-          <span class="nav-icon">🌀</span>
-          <span class="nav-label">预设库与多波混合</span>
-        </div>
-        <div class="nav-item" data-target="export">
-          <span class="nav-icon">💻</span>
-          <span class="nav-label">代码生成与视频导出</span>
-        </div>
-        <div class="nav-item" data-target="preferences">
-          <span class="nav-icon">⚙️</span>
-          <span class="nav-label">首选项与视口设置</span>
-        </div>
-      </nav>
-
-      <div class="sidebar-footer">
-        <div class="footer-profile">
-          <div class="avatar-badge" style="font-family: 'Times New Roman', Georgia, Cambria, serif; font-size: 14px; font-weight: bold; background: #0078d4; color: #ffffff;">M</div>
-          <div>
-            <div style="font-size: 12px; font-weight: 600;">Math Studio</div>
-            <div style="font-size: 11px; color: var(--win-text-secondary);">v2.0 旗舰版</div>
-          </div>
-        </div>
-        <div class="footer-actions">
-          <button id="save-project-btn" class="win11-btn sm" title="保存当前项目">保存</button>
-          <button id="back-home-btn" class="win11-btn sm" title="返回项目资源窗口">返回</button>
-          <button id="theme-toggle-btn" class="hud-btn" title="切换深色/浅色模式">
-            <svg class="theme-icon-svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18V4c4.41 0 8 3.59 8 8s-3.59 8-8 8z"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-    </aside>
-
-    <!-- Resizable splitter between sidebar and main workspace -->
-    <div class="splitter splitter-v" id="sidebar-splitter" title="拖动调整侧边栏宽度"></div>
-
-    <!-- ====================================================================
-         Main Workspace: Split Panes (Settings Controls + 3D Viewport)
-         ==================================================================== -->
-    <main class="main-content">
-
-      <!-- Left Settings Content Pane -->
-      <section class="content-pane" id="settings-scroll-pane">
-
-        <!-- --------------------------------------------------------------
-             Page 1: 表达式与3D工作台 (Expression Studio)
-             -------------------------------------------------------------- -->
-        <div class="page-section active" id="sec-studio">
-          <div class="page-breadcrumbs">
-            <span>设置</span> <span>›</span> <span>表达式与3D工作台</span>
-          </div>
-          <h2 class="page-title">• 表达式工作台</h2>
-
-          <div class="section-group-title">数学表达式定义</div>
-
-          <!-- Function Type Selector -->
-          <div class="win11-card">
-            <div class="card-info">
-              <div class="card-icon">🔲</div>
-              <div class="card-text">
-                <div class="card-title">函数表现形式</div>
-                <div class="card-desc">选择数学表达式在三维空间中的几何构建模式</div>
-              </div>
-            </div>
-            <div class="card-control">
-              <select id="func-type-select" class="win11-select">
-                <option value="explicit" selected>显式曲面 z = f(x, y, t)</option>
-                <option value="parametric_curve">空间参数曲线 (x(u), y(u), z(u))</option>
-                <option value="parametric_surface">三维参数曲面 (x(u,v), y(u,v), z(u,v))</option>
-                <option value="vector_field">三维向量场 F(x,y,z) = (u, v, w)</option>
-              </select>
-            </div>
-          </div>
-
+  <div id="page-studio" class="app-page active">
+    <div class="app-container" id="workspace">
+      <div class="workspace-left" id="sidebar">
+      <section class="workspace-panel function-panel" aria-labelledby="function-title">
+        <h2 class="workspace-heading" id="function-title">Function</h2>
+        <div class="function-controls">
+          <label class="control-caption" for="func-type-select">函数类型</label>
+          <select id="func-type-select" class="win11-select">
+            <option value="explicit" selected>显式曲面 z = f(x, y, t)</option>
+            <option value="parametric_curve">空间参数曲线 (x, y, z)</option>
+            <option value="parametric_surface">三维参数曲面 (u, v)</option>
+            <option value="vector_field">三维向量场 F(x, y, z)</option>
+          </select>
           <!-- Explicit Input Block -->
           <div id="block-explicit">
             <div class="win11-card">
               <div class="card-info">
                 <div class="card-icon">𝑓</div>
                 <div class="card-text">
-                  <div class="card-title">函数方程 z = f(x, y)</div>
-                  <div class="card-desc">支持 sin, cos, tan, exp, sqrt, abs, sinc 等函数及自定义参数</div>
+                  <div class="card-title">z = f(x, y)</div>
+                  <div class="card-desc">按 Enter 应用</div>
                 </div>
               </div>
-              <div class="card-control" style="flex: 1.2;">
+              <div class="card-control">
                 <input type="text" id="expr-explicit-input" class="win11-input mono" style="width: 100%;" value="A * cos(omega * sqrt(x^2 + y^2) - t) / (1 + 0.12 * (x^2 + y^2))">
               </div>
             </div>
@@ -433,7 +347,7 @@
                 <div class="card-icon">𝑋</div>
                 <div class="card-text"><div class="card-title">X(u, t)</div></div>
               </div>
-              <div class="card-control" style="flex: 1.2;">
+              <div class="card-control">
                 <input type="text" id="curve-x-input" class="win11-input mono" style="width: 100%;" value="A * sin(3 * u + phi)">
               </div>
             </div>
@@ -442,7 +356,7 @@
                 <div class="card-icon">𝑌</div>
                 <div class="card-text"><div class="card-title">Y(u, t)</div></div>
               </div>
-              <div class="card-control" style="flex: 1.2;">
+              <div class="card-control">
                 <input type="text" id="curve-y-input" class="win11-input mono" style="width: 100%;" value="A * sin(4 * u)">
               </div>
             </div>
@@ -451,7 +365,7 @@
                 <div class="card-icon">𝑍</div>
                 <div class="card-text"><div class="card-title">Z(u, t)</div></div>
               </div>
-              <div class="card-control" style="flex: 1.2;">
+              <div class="card-control">
                 <input type="text" id="curve-z-input" class="win11-input mono" style="width: 100%;" value="A * cos(5 * u)">
               </div>
             </div>
@@ -464,7 +378,7 @@
                 <div class="card-icon">𝑋</div>
                 <div class="card-text"><div class="card-title">X(u, v, t)</div></div>
               </div>
-              <div class="card-control" style="flex: 1.2;">
+              <div class="card-control">
                 <input type="text" id="surf-x-input" class="win11-input mono" style="width: 100%;" value="(R + 1.2*cos(v))*cos(u)">
               </div>
             </div>
@@ -473,7 +387,7 @@
                 <div class="card-icon">𝑌</div>
                 <div class="card-text"><div class="card-title">Y(u, v, t)</div></div>
               </div>
-              <div class="card-control" style="flex: 1.2;">
+              <div class="card-control">
                 <input type="text" id="surf-y-input" class="win11-input mono" style="width: 100%;" value="(R + 1.2*cos(v))*sin(u)">
               </div>
             </div>
@@ -482,7 +396,7 @@
                 <div class="card-icon">𝑍</div>
                 <div class="card-text"><div class="card-title">Z(u, v, t)</div></div>
               </div>
-              <div class="card-control" style="flex: 1.2;">
+              <div class="card-control">
                 <input type="text" id="surf-z-input" class="win11-input mono" style="width: 100%;" value="1.2*sin(v)">
               </div>
             </div>
@@ -492,121 +406,36 @@
           <div id="block-vector-field" style="display: none;">
             <div class="win11-card">
               <div class="card-info"><div class="card-text"><div class="card-title">U(x, y, z)</div></div></div>
-              <div class="card-control" style="flex: 1.2;"><input type="text" id="vec-u-input" class="win11-input mono" style="width: 100%;" value="-y"></div>
+              <div class="card-control"><input type="text" id="vec-u-input" class="win11-input mono" style="width: 100%;" value="-y"></div>
             </div>
             <div class="win11-card">
               <div class="card-info"><div class="card-text"><div class="card-title">V(x, y, z)</div></div></div>
-              <div class="card-control" style="flex: 1.2;"><input type="text" id="vec-v-input" class="win11-input mono" style="width: 100%;" value="x"></div>
+              <div class="card-control"><input type="text" id="vec-v-input" class="win11-input mono" style="width: 100%;" value="x"></div>
             </div>
             <div class="win11-card">
               <div class="card-info"><div class="card-text"><div class="card-title">W(x, y, z)</div></div></div>
-              <div class="card-control" style="flex: 1.2;"><input type="text" id="vec-w-input" class="win11-input mono" style="width: 100%;" value="0.3 * z * sin(t)"></div>
+              <div class="card-control"><input type="text" id="vec-w-input" class="win11-input mono" style="width: 100%;" value="0.3 * z * sin(t)"></div>
             </div>
           </div>
 
-          <!-- Formula Preview HUD Card -->
-          <div class="win11-card" style="background: rgba(0, 120, 212, 0.08); border-color: rgba(0, 120, 212, 0.25);">
-            <div class="card-info">
-              <div class="card-icon">∑</div>
-              <div class="card-text">
-                <div class="card-title">公式实时 LaTeX 解析预览</div>
-                <div id="katex-studio-preview" style="margin-top: 6px; font-size: 15px;"></div>
-              </div>
-            </div>
-            <div class="card-control">
-              <button id="apply-expression-btn" class="win11-btn primary">• 应用更新</button>
-            </div>
-          </div>
-
-          <div class="section-group-title">自变量定义域与网格密度</div>
-
-          <!-- Domain Range Card -->
-          <div class="win11-card">
-            <div class="card-info">
-              <div class="card-icon">↔</div>
-              <div class="card-text">
-                <div class="card-title">X 定义域范围 [Xmin, Xmax]</div>
-                <div class="card-desc">指定自变量 X 的绘制边界</div>
-              </div>
-            </div>
-            <div class="card-control">
-              <input type="number" id="range-xmin" class="win11-input" style="width: 65px;" value="-5">
-              <span>至</span>
-              <input type="number" id="range-xmax" class="win11-input" style="width: 65px;" value="5">
-            </div>
-          </div>
-
-          <div class="win11-card">
-            <div class="card-info">
-              <div class="card-icon">↕</div>
-              <div class="card-text">
-                <div class="card-title">Y 定义域范围 [Ymin, Ymax]</div>
-                <div class="card-desc">指定自变量 Y 的绘制边界</div>
-              </div>
-            </div>
-            <div class="card-control">
-              <input type="number" id="range-ymin" class="win11-input" style="width: 65px;" value="-5">
-              <span>至</span>
-              <input type="number" id="range-ymax" class="win11-input" style="width: 65px;" value="5">
-            </div>
-          </div>
-
-          <!-- Resolution Slider -->
-          <div class="win11-card">
-            <div class="card-info">
-              <div class="card-icon">▦</div>
-              <div class="card-text">
-                <div class="card-title">曲面网格采样密度</div>
-                <div class="card-desc">控制 3D 矢量的几何细分精度</div>
-              </div>
-            </div>
-            <div class="card-control">
-              <div class="slider-group">
-                <input type="range" id="mesh-res-slider" class="win11-range" min="20" max="140" step="5" value="70">
-                <span id="mesh-res-val" class="slider-val">70x70</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Color Map Selector -->
-          <div class="win11-card">
-            <div class="card-info">
-              <div class="card-icon">🎨</div>
-              <div class="card-text">
-                <div class="card-title">高程色彩映射方案</div>
-                <div class="card-desc">根据数值高度着色</div>
-              </div>
-            </div>
-            <div class="card-control">
-              <select id="colormap-select" class="win11-select">
-                <option value="coolwarm" selected>Cool-Warm 经典冷暖</option>
-                <option value="viridis">Viridis 科学翠绿</option>
-                <option value="plasma">Plasma 霓虹紫金</option>
-                <option value="rainbow">Rainbow 七彩光谱</option>
-                <option value="neon">Neon 赛博青粉</option>
-              </select>
-            </div>
-          </div>
-
-          <!-- Wireframe Toggle -->
-          <div class="win11-card">
-            <div class="card-info">
-              <div class="card-icon">🕸️</div>
-              <div class="card-text">
-                <div class="card-title">纯矢量网格线框模式</div>
-                <div class="card-desc">隐藏实体着色，仅显示三维矢量骨架</div>
-              </div>
-            </div>
-            <div class="card-control">
-              <label class="win11-toggle">
-                <input type="checkbox" id="wireframe-toggle">
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-          </div>
-
+        <div id="katex-studio-preview" class="function-preview" aria-label="公式预览"></div>
+            <button id="apply-expression-btn" class="win11-btn sm" type="button">应用表达式</button>
         </div>
-
+      </section>
+      <section class="workspace-panel program-panel" aria-labelledby="program-title">
+        <div class="program-header">
+          <h2 class="workspace-heading" id="program-title">Program</h2>
+          <button class="program-back" id="program-back" type="button" aria-controls="sec-studio" title="返回工具列表" hidden>
+            <span aria-hidden="true">‹</span><span>返回</span>
+          </button>
+        </div>
+        <div class="content-pane" id="settings-scroll-pane">
+          <div class="page-section active" id="sec-studio">
+            <button class="program-entry" type="button" data-program="keyframes"><span>关键帧与参数</span><span aria-hidden="true">›</span></button>
+            <button class="program-entry" type="button" data-program="calculus"><span>微积分分析</span><span aria-hidden="true">›</span></button>
+            <button class="program-entry" type="button" data-program="presets"><span>函数预设</span><span aria-hidden="true">›</span></button>
+            <button class="program-entry" type="button" data-program="export"><span>生成代码与导出</span><span aria-hidden="true">›</span></button>
+          </div>
         <!-- --------------------------------------------------------------
              Page 2: 关键帧与复合函数动画 (Keyframes & Motion)
              -------------------------------------------------------------- -->
@@ -793,7 +622,7 @@
             <div class="card-info">
               <div class="card-text">
                 <div class="card-title">切点坐标 (x₀, y₀)</div>
-                <div class="card-desc">动态移动切点观察切平面姿态</div>
+                <div class="card-desc">在下方调整数值，或直接在右侧 3D 曲面上点击鼠标左键吸附切点</div>
               </div>
             </div>
             <div class="card-control">
@@ -821,18 +650,78 @@
             </div>
           </div>
 
-          <div class="section-group-title">积分计算与黎曼和</div>
+          <!-- Taylor Series Card -->
+          <div class="section-group-title">多元泰勒级数多项式近似 (Taylor Expansion)</div>
+
+          <div class="win11-card">
+            <div class="card-info">
+              <div class="card-icon">📐</div>
+              <div class="card-text">
+                <div class="card-title">局域泰勒多项式展开</div>
+                <div class="card-desc">在展开中心附近用高阶多项式逼近非线性函数</div>
+              </div>
+            </div>
+            <div class="card-control" style="gap: 8px;">
+              <span>变量:</span>
+              <select id="taylor-var-select" class="win11-select" style="width: 60px;">
+                <option value="x" selected>x</option>
+                <option value="y">y</option>
+              </select>
+              <span>x₀:</span>
+              <input type="number" id="taylor-x0" class="win11-input" style="width: 55px;" value="0" step="0.5">
+              <span>阶数 n:</span>
+              <input type="number" id="taylor-order" class="win11-input" style="width: 50px;" value="4" min="1" max="10">
+              <button id="calc-taylor-btn" class="win11-btn primary sm">• 展开</button>
+            </div>
+          </div>
+
+          <div class="win11-card" id="card-taylor-result" style="display: none; background: rgba(0, 120, 212, 0.08);">
+            <div class="card-info">
+              <div class="card-text" style="width: 100%;">
+                <div class="card-title">泰勒级数展开式</div>
+                <div id="taylor-katex-out" style="margin-top: 8px; font-size: 14.5px; line-height: 1.8;"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-group-title">积分计算与三维黎曼和</div>
 
           <div class="win11-card">
             <div class="card-info">
               <div class="card-icon">∫</div>
               <div class="card-text">
                 <div class="card-title">定积分 / 不定积分计算</div>
-                <div class="card-desc">对选定自变量求积分并返回原函数与数值积分</div>
+                <div class="card-desc">配置自变量、积分区间 [a, b]，计算精确解析原函数与数值积分</div>
+              </div>
+            </div>
+            <div class="card-control" style="gap: 8px;">
+              <span>对变量:</span>
+              <select id="integral-var-select" class="win11-select" style="width: 60px;">
+                <option value="x" selected>x</option>
+                <option value="y">y</option>
+              </select>
+              <span>下限 a:</span>
+              <input type="number" id="integral-a-input" class="win11-input" style="width: 55px;" value="0" step="0.5">
+              <span>上限 b:</span>
+              <input type="number" id="integral-b-input" class="win11-input" style="width: 55px;" value="3.14" step="0.5">
+              <button id="calc-integral-btn" class="win11-btn primary sm">• 执行积分</button>
+            </div>
+          </div>
+
+          <!-- Riemann Sum 3D Visualization Toggle -->
+          <div class="win11-card">
+            <div class="card-info">
+              <div class="card-icon">🧊</div>
+              <div class="card-text">
+                <div class="card-title">三维黎曼和离散柱体积木 (Riemann Volume)</div>
+                <div class="card-desc">在三维曲面下方实时呈现离散柱体近似体积 V = ∑ f(x, y) Δx Δy</div>
               </div>
             </div>
             <div class="card-control">
-              <button id="calc-integral-btn" class="win11-btn primary">• 执行积分运算</button>
+              <label class="win11-toggle">
+                <input type="checkbox" id="riemann-sum-toggle">
+                <span class="toggle-slider"></span>
+              </label>
             </div>
           </div>
 
@@ -1001,7 +890,7 @@
               </div>
               <span style="font-size: 11px; color: var(--win-text-secondary);" id="code-lang-label">JavaScript</span>
             </div>
-            <pre class="code-box" id="generated-code-box">// 正在实时生成代码...</pre>
+            <pre class="code-box" id="generated-code-box" data-i18n-keep>// 正在实时生成代码...</pre>
           </div>
 
           <div class="section-group-title">高清 .mp4 视频导出 (FFmpeg 硬件管线)</div>
@@ -1060,8 +949,11 @@
             <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
               <div id="export-progress-bar" style="width: 0%; height: 100%; background: var(--win-accent); transition: width 0.1s ease;"></div>
             </div>
-            <div id="export-finish-actions" style="display: none; justify-content: flex-end; gap: 10px; margin-top: 6px;">
-              <button id="open-video-folder-btn" class="win11-btn sm">• 打开视频所在文件夹</button>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
+              <button id="cancel-mp4-export-btn" class="win11-btn sm" style="color: #ff6b6b; border-color: rgba(255, 107, 107, 0.4);">✕ 取消导出</button>
+              <div id="export-finish-actions" style="display: none; justify-content: flex-end; gap: 10px;">
+                <button id="open-video-folder-btn" class="win11-btn sm">• 打开视频所在文件夹</button>
+              </div>
             </div>
           </div>
 
@@ -1076,38 +968,13 @@
           </div>
           <h2 class="page-title">• 首选项与视口渲染设置</h2>
 
-          <div class="section-group-title">视口辅助显示</div>
-
-          <div class="win11-card">
-            <div class="card-info">
-              <div class="card-icon">🧭</div>
-              <div class="card-text">
-                <div class="card-title">三维矢量坐标轴 (X: 红, Y: 绿, Z: 蓝)</div>
-                <div class="card-desc">显示带有箭头与刻度的空间坐标矢量</div>
-              </div>
-            </div>
-            <div class="card-control">
-              <label class="win11-toggle">
-                <input type="checkbox" id="pref-axes-toggle" checked>
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-          </div>
-
-          <div class="win11-card">
-            <div class="card-info">
-              <div class="card-icon">🏁</div>
-              <div class="card-text">
-                <div class="card-title">空间参考网格 (Ground Grid)</div>
-                <div class="card-desc">显示水平基准网格平面</div>
-              </div>
-            </div>
-            <div class="card-control">
-              <label class="win11-toggle">
-                <input type="checkbox" id="pref-grid-toggle" checked>
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
+          <div class="section-group-title">语言</div>
+          <div class="language-setting">
+            <label class="card-title" for="language-select">界面语言</label>
+            <select class="win11-select" id="language-select">
+              <option value="zh-CN">简体中文</option>
+              <option value="en">英语</option>
+            </select>
           </div>
 
           <div class="section-group-title">系统环境检测</div>
@@ -1127,39 +994,141 @@
 
         </div>
 
+        </div>
       </section>
+      </div>
+      <div class="splitter splitter-v" id="sidebar-splitter" title="拖动调整左侧面板宽度"></div>
+      <section class="workspace-panel viewport-pane" aria-label="3D 视口">
+        <div class="viewport-header">
+          <div class="workspace-tabs" aria-label="视口工作区">
+            <button type="button" class="workspace-tab active" data-view-tab="view" aria-controls="workspace-view" aria-pressed="true">View</button>
+            <button type="button" class="workspace-tab" data-view-tab="algebra" aria-controls="workspace-algebra" aria-pressed="false">Algebra</button>
+            <button type="button" class="workspace-tab" data-view-tab="geometry" aria-controls="workspace-geometry" aria-pressed="false">Geometry</button>
+          </div>
+          <div class="viewport-settings">
+            <details class="viewport-popover" id="overlay-menu">
+              <summary>显示</summary>
+              <div class="viewport-popover-body" id="guide-controls">
+                <label class="viewport-check"><input type="checkbox" data-guide="enabled"> 显示叠加层</label>
+                <fieldset>
+                  <legend>基准线和网格</legend>
+                  <div class="viewport-toggle-row">
+                    <label class="viewport-check"><input type="checkbox" data-axis-guide="0"><span class="axis-x">X</span></label>
+                    <label class="viewport-check"><input type="checkbox" data-axis-guide="1"><span class="axis-y">Y</span></label>
+                    <label class="viewport-check"><input type="checkbox" data-axis-guide="2"><span class="axis-z">Z</span></label>
+                  </div>
+                  <div class="viewport-toggle-row">
+                    <label class="viewport-check"><input type="checkbox" data-guide="floor"> 地面网格</label>
+                    <label class="viewport-check"><input type="checkbox" data-guide="orthoGrid"> 正交网格</label>
+                  </div>
+                  <div class="viewport-input-row">
+                    <label>间距<input class="win11-input" type="number" min="0.01" max="100" step="any" data-guide="spacing"></label>
+                    <label>细分<input class="win11-input" type="number" min="1" max="10" step="1" data-guide="subdivisions"></label>
+                    <label>不透明度<input class="win11-input" type="number" min="0" max="1" step="0.05" data-guide="opacity"></label>
+                  </div>
+                </fieldset>
+                <fieldset>
+                  <legend>3D 游标</legend>
+                  <div class="viewport-toggle-row">
+                    <label class="viewport-check"><input type="checkbox" data-guide="cursor"> 显示游标</label>
+                    <button type="button" class="win11-btn sm" id="cursor-reset">回到原点</button>
+                  </div>
+                  <div class="viewport-input-row">
+                    <label>X<input class="win11-input" type="number" step="any" data-cursor-axis="0"></label>
+                    <label>Y<input class="win11-input" type="number" step="any" data-cursor-axis="1"></label>
+                    <label>Z<input class="win11-input" type="number" step="any" data-cursor-axis="2"></label>
+                  </div>
+                  <p class="viewport-hint">Shift + 右键可放置游标</p>
+                </fieldset>
+                <fieldset>
+                  <legend>线框</legend>
+                  <label class="viewport-select-row">模式
+                    <select class="win11-select" data-guide="wireMode">
+                      <option value="off">关闭线框</option>
+                      <option value="overlay">叠加线框</option>
+                      <option value="only">仅线框</option>
+                    </select>
+                  </label>
+                  <label class="viewport-select-row">叠加不透明度
+                    <input class="win11-range" type="range" min="0" max="1" step="0.01" data-guide="wireOpacity">
+                  </label>
+                </fieldset>
+              </div>
+            </details>
+            <details class="viewport-popover" id="shading-menu">
+              <summary>着色</summary>
+              <div class="viewport-popover-body">
+                <label class="viewport-select-row">属性
+                  <select class="win11-select" id="property-metric">
+                    <option value="height">海拔 Z</option>
+                    <option value="gaussian">高斯曲率 K</option>
+                    <option value="mean">平均曲率 |H|</option>
+                    <option value="curve">曲线曲率 κ</option>
+                    <option value="magnitude">向量模长 ‖F‖</option>
+                    <option value="solid">实体材质</option>
+                  </select>
+                </label>
+                <label class="viewport-select-row">色板
+                  <select class="win11-select" id="colormap-select">
+                    <option value="coolwarm">Coolwarm 冷暖</option>
+                    <option value="viridis">Viridis 紫绿黄</option>
+                    <option value="plasma">Plasma 紫红黄</option>
+                    <option value="rainbow">Rainbow 彩虹</option>
+                    <option value="neon">Neon 青紫粉</option>
+                    <option value="gray">Gray 灰阶</option>
+                  </select>
+                </label>
+                <label class="viewport-select-row">范围
+                  <select class="win11-select" id="color-range-mode">
+                    <option value="auto">自动 · 当前帧</option>
+                    <option value="manual">手动 · 固定</option>
+                  </select>
+                </label>
+                <form id="color-range-form" hidden>
+                  <div class="viewport-input-row">
+                    <label>最小值<input class="win11-input" id="color-range-min" type="number" step="any" required></label>
+                    <label>最大值<input class="win11-input" id="color-range-max" type="number" step="any" required></label>
+                    <button type="submit" class="win11-btn sm">应用</button>
+                  </div>
+                  <p class="viewport-hint" id="color-range-error" role="status" hidden>最小值必须小于最大值。</p>
+                </form>
+                <label class="viewport-check"><input type="checkbox" id="color-legend-toggle" checked> 显示色标</label>
+              </div>
+            </details>
+          </div>
+        </div>
 
-      <!-- Resizable splitter between settings pane and 3D viewport -->
-      <div class="splitter splitter-v" id="content-splitter" title="拖动调整设置面板宽度"></div>
-
-      <!-- Right 3D Viewport Pane -->
-      <section class="viewport-pane">
-
+        <div class="viewport-workspace" id="workspace-view">
         <!-- 3D canvas area (flexible) -->
         <div class="viewport-canvas-wrap">
           <div id="viewport-canvas-container">
             <!-- Canvas injected here by Three.js -->
           </div>
 
-          <!-- Top Floating HUD -->
-          <div class="viewport-hud-top">
-            <div class="viewport-formula-badge">
-              <span style="color: var(--win-accent); font-weight: 600;">当前函数:</span>
-              <div id="hud-formula-render" class="formula-render"></div>
-            </div>
-
-            <div class="viewport-tools-group">
-              <button id="view-iso-btn" class="hud-btn active" title="重置为三维等轴透视视角">3D</button>
-              <button id="view-top-btn" class="hud-btn" title="顶视图 (XY 投影)">俯视</button>
-              <button id="view-front-btn" class="hud-btn" title="前视图 (XZ 投影)">正视</button>
-              <button id="hud-wireframe-btn" class="hud-btn" title="线框网格切换">▦</button>
-              <button id="camera-panel-toggle-btn" class="hud-btn" title="摄像机控制">📷</button>
+          <div class="viewport-info" id="viewport-info">
+            <div id="view-info">
+              <span class="control-caption">Info</span>
+              <dl class="picked-point">
+                <dt>X</dt><dd id="picked-x">—</dd>
+                <dt>Y</dt><dd id="picked-y">—</dd>
+                <dt>Z</dt><dd id="picked-z">—</dd>
+              </dl>
             </div>
           </div>
-
-          <!-- Stats Pill -->
-          <div class="stats-badge" id="hud-stats-badge">60 FPS | WebGL2</div>
-
+          <div class="viewport-gizmo" id="viewport-gizmo" aria-label="坐标轴视角">
+            <button class="gizmo-axis" type="button" data-axis="1,0,0" data-camera-view="right" title="沿 X 轴查看">X</button>
+            <button class="gizmo-axis" type="button" data-axis="-1,0,0" data-camera-view="left" title="沿负 X 轴查看">−</button>
+            <button class="gizmo-axis" type="button" data-axis="0,0,1" data-camera-view="front" title="沿 Y 轴查看">Y</button>
+            <button class="gizmo-axis" type="button" data-axis="0,0,-1" data-camera-view="back" title="沿负 Y 轴查看">−</button>
+            <button class="gizmo-axis" type="button" data-axis="0,1,0" data-camera-view="top" title="沿 Z 轴查看">Z</button>
+            <button class="gizmo-axis" type="button" data-axis="0,-1,0" data-camera-view="bottom" title="沿负 Z 轴查看">−</button>
+          </div>
+          <aside id="color-legend" class="color-legend" aria-label="属性色标" hidden>
+            <div id="color-legend-name"></div>
+            <div id="color-legend-ramp" class="color-legend-ramp"></div>
+            <div class="color-legend-values"><span id="color-legend-min"></span><span id="color-legend-max"></span></div>
+          </aside>
+          <div class="stats-badge" id="hud-stats-badge" style="display: none;">60 FPS | WebGL2</div>
           <!-- Camera control panel (floating) -->
           <div class="camera-panel" id="camera-panel" style="display: none;">
             <div class="camera-panel-header">
@@ -1178,13 +1147,6 @@
                 <input type="range" id="cam-fov" class="win11-range" min="5" max="120" step="1" value="45">
                 <span id="cam-fov-val" class="slider-val">45°</span>
               </div>
-              <div class="camera-row">
-                <span class="camera-label">投影</span>
-                <select id="cam-projection" class="win11-select">
-                  <option value="perspective" selected>透视</option>
-                  <option value="orthographic">正交</option>
-                </select>
-              </div>
             </div>
             <div class="camera-view-buttons">
               <button class="win11-btn sm cam-view-btn" data-view="iso">等轴</button>
@@ -1202,25 +1164,178 @@
           </div>
         </div>
 
-        <!-- Resizable splitter between canvas and timeline -->
-        <div class="splitter splitter-h" id="timeline-splitter" title="拖动调整时间轴高度"></div>
-
-        <!-- Keyframe timeline editor panel -->
-        <div class="timeline-panel" id="timeline-panel">
+      <div class="viewport-footer">
+          <div class="viewport-actions">
+            <div class="viewport-control-group" aria-label="视点">
+              <span>View Points</span>
+              <button id="view-iso-btn" class="hud-btn active" type="button" title="等轴视图">3D</button>
+              <button id="view-top-btn" class="hud-btn" type="button" title="顶视图">Top</button>
+              <button id="view-front-btn" class="hud-btn" type="button" title="正视图">Front</button>
+            </div>
+            <button id="view-quality-btn" class="viewport-pill" type="button" title="调整曲面网格采样密度">View quality <span id="mesh-res-val">70x70</span></button>
+            <div class="viewport-control-group">
+                  <button id="camera-panel-toggle-btn" class="hud-btn" type="button" title="摄像机设置">Camera</button>
+              <select id="cam-projection" class="win11-select" aria-label="相机投影">
+                <option value="perspective" selected>Persp</option>
+                <option value="orthographic">Ortho</option>
+              </select>
+            </div>
+          </div>
+          <label class="viewport-zoom" title="视口缩放">
+            <input id="viewport-zoom" class="win11-range" type="range" min="25" max="250" step="1" value="100" aria-label="视口缩放">
+            <output id="viewport-zoom-value" for="viewport-zoom">100%</output>
+          </label>
+        </div>
+        </div>
+        <section class="viewport-workspace algebra-workspace" id="workspace-algebra" hidden>
+          <div class="orthographic-views">
+            <figure><figcaption><b>X</b><span>左视图</span></figcaption><canvas data-ortho="left" aria-label="左视图"></canvas></figure>
+            <figure><figcaption><b>Y</b><span>正视图</span></figcaption><canvas data-ortho="front" aria-label="正视图"></canvas></figure>
+            <figure><figcaption><b>Z</b><span>顶视图</span></figcaption><canvas data-ortho="top" aria-label="顶视图"></canvas></figure>
+          </div>
+          <section class="algebra-nodes" aria-label="数学节点">
+            <div class="node-formula"><span>函数</span><div id="hud-formula-render" class="formula-render"></div></div>
+            <div class="editor-toolbar">
+              <span id="node-status" role="status"></span>
+            </div>
+            <div id="node-scroll" class="node-scroll" tabindex="0" aria-label="节点编辑器">
+              <div id="node-board" class="node-board">
+                <svg class="node-links" aria-hidden="true"></svg>
+                <div class="node-cards"></div>
+              </div>
+            </div>
+          </section>
+        </section>
+        <section class="viewport-workspace geometry-workspace" id="workspace-geometry" hidden>
+          <div class="editor-toolbar">
+            <button id="mesh-capture" class="win11-btn sm" type="button">捕获当前网格</button>
+            <div class="workspace-tabs" aria-label="网格选择模式">
+              <button class="workspace-tab active" type="button" data-mesh-mode="vertex" aria-pressed="true">Points</button>
+              <button class="workspace-tab" type="button" data-mesh-mode="edge" aria-pressed="false">Edges</button>
+              <button class="workspace-tab" type="button" data-mesh-mode="face" aria-pressed="false">Faces</button>
+            </div>
+            <button id="mesh-frame" class="win11-btn sm" type="button">适配</button>
+            <span id="mesh-source" role="status"></span>
+          </div>
+          <div class="mesh-body">
+            <div id="mesh-canvas"></div>
+            <aside class="mesh-inspector">
+              <h3>网格属性</h3>
+              <p class="viewport-hint">中键拖动旋转，左键拖动框选，Shift 加选</p>
+              <p id="mesh-selection">选择顶点、边或面</p>
+              <dl id="mesh-properties" class="geometry-stats" hidden>
+                <dt>X</dt><dd id="mesh-x"></dd>
+                <dt>Y</dt><dd id="mesh-y"></dd>
+                <dt>Z</dt><dd id="mesh-z"></dd>
+                <dt>高斯曲率 K</dt><dd id="mesh-curvature"></dd>
+              </dl>
+              <form id="mesh-position" hidden>
+                <label>X <input class="win11-input" type="number" step="any" required></label>
+                <label>Y <input class="win11-input" type="number" step="any" required></label>
+                <label>Z <input class="win11-input" type="number" step="any" required></label>
+                <button class="win11-btn sm" type="submit">更新坐标</button>
+              </form>
+              <form id="mesh-attribute-select" hidden>
+                <h3>按属性选择</h3>
+                <select id="mesh-attribute" class="win11-select" aria-label="筛选属性">
+                  <option value="x">X</option>
+                  <option value="y">Y</option>
+                  <option value="z">Z</option>
+                  <option value="curvature">高斯曲率 K</option>
+                </select>
+                <label>最小值 <input id="mesh-attribute-min" class="win11-input" type="number" step="any"></label>
+                <label>最大值 <input id="mesh-attribute-max" class="win11-input" type="number" step="any"></label>
+                <button class="win11-btn sm" type="submit">按属性选择</button>
+                <output id="mesh-attribute-status" role="status"></output>
+              </form>
+              <fieldset id="mesh-marking" disabled>
+                <legend>选区标记</legend>
+                <input id="mesh-mark-color" type="color" value="#ff9763" aria-label="标记颜色">
+                <button id="mesh-mark" class="win11-btn sm" type="button">应用</button>
+                <button id="mesh-unmark" class="win11-btn sm" type="button">清除</button>
+              </fieldset>
+              <fieldset id="mesh-material" disabled>
+                <legend>材质</legend>
+                <label>底色 <input id="mesh-base-color" type="color" value="#667d9d"></label>
+                <label>粗糙度 <input id="mesh-roughness" type="range" min="0" max="1" step="0.01" value="0.65"></label>
+              </fieldset>
+            </aside>
+          </div>
+        </section>
+      </section>
+      <div class="splitter splitter-v" id="content-splitter" title="拖动调整属性面板宽度"></div>
+      <aside class="workspace-panel attribute-panel" id="attribute-panel" aria-labelledby="attribute-title">
+        <h2 class="workspace-heading" id="attribute-title">Attribute</h2>
+        <div class="attribute-groups">
+          <details>
+            <summary>Transform</summary>
+            <div class="attribute-body">
+              <button class="win11-btn sm" id="attribute-camera-btn" type="button">摄像机位置与目标</button>
+            </div>
+          </details>
+          <details>
+            <summary>Process</summary>
+            <div class="attribute-body">
+              <button class="win11-btn sm" id="attribute-shading-btn" type="button">属性着色与范围</button>
+            </div>
+          </details>
+          <details id="geometry-attributes" open>
+            <summary>Geometry</summary>
+            <div class="attribute-body">
+              <dl class="geometry-stats">
+                <dt>Points</dt><dd id="geometry-points">—</dd>
+                <dt>Edges</dt><dd id="geometry-edges">—</dd>
+                <dt>Faces</dt><dd id="geometry-faces">—</dd>
+              </dl>
+              <label class="attribute-label" for="mesh-res-slider">采样密度</label>
+              <input type="range" id="mesh-res-slider" class="win11-range" min="20" max="140" step="5" value="70">
+              <fieldset class="attribute-domain">
+                <legend>定义域</legend>
+                <div><span>X</span><input type="number" id="range-xmin" class="win11-input" value="-5" aria-label="X 最小值"><input type="number" id="range-xmax" class="win11-input" value="5" aria-label="X 最大值"></div>
+                <div><span>Y</span><input type="number" id="range-ymin" class="win11-input" value="-5" aria-label="Y 最小值"><input type="number" id="range-ymax" class="win11-input" value="5" aria-label="Y 最大值"></div>
+              </fieldset>
+            </div>
+          </details>
+        </div>
+      </aside>
+      <div class="splitter splitter-h" id="timeline-splitter" title="拖动调整底部面板高度"></div>
+      <div class="workspace-bottom" id="workspace-bottom">
+        <section class="workspace-panel layer-panel" id="layer-panel" aria-labelledby="layer-title">
+          <h2 class="workspace-heading" id="layer-title">Layer</h2>
+          <div class="layer-row">
+            <button class="layer-select" id="layer-object-btn" type="button" aria-expanded="false" aria-controls="layer-details">
+              <span class="layer-arrow" aria-hidden="true">▸</span><span id="layer-object-name">显式曲面</span>
+            </button>
+            <label class="layer-visibility" title="显示函数图形"><input id="layer-visible" type="checkbox" aria-label="显示函数图形" checked></label>
+          </div>
+          <dl class="geometry-stats layer-details" id="layer-details" hidden>
+            <dt>Points</dt><dd id="layer-points">—</dd>
+            <dt>Edges</dt><dd id="layer-edges">—</dd>
+            <dt>Faces</dt><dd id="layer-faces">—</dd>
+          </dl>
+        </section>
+        <div class="splitter splitter-v" id="layer-timeline-splitter" title="拖动调整图层和时间轴宽度"></div>
+        <section class="workspace-panel timeline-panel" id="timeline-panel" aria-label="关键帧时间轴">
+          <div class="timeline-header">
+            <div class="workspace-tabs" aria-label="时间轴视图">
+              <button type="button" class="workspace-tab active" data-timeline-tab="timeline" aria-pressed="true">Timeline</button>
+              <button type="button" class="workspace-tab" data-timeline-tab="curve" aria-pressed="false">Curve</button>
+            </div>
+            <span class="time-indicator" id="time-display-label">0.00s / 8.00s</span>
+          </div>
           <div class="timeline-toolbar">
             <div class="playback-controls">
               <button id="time-step-back-btn" class="hud-btn" title="步退 0.2s">⏮</button>
-              <button id="play-pause-btn" class="hud-btn active" title="播放 / 暂停" style="width: 34px; height: 34px; font-size: 15px;">▶</button>
+              <button id="play-pause-btn" class="hud-btn active" title="播放 / 暂停">▶</button>
               <button id="time-step-fwd-btn" class="hud-btn" title="步进 0.2s">⏭</button>
             </div>
 
             <div class="timeline-scrubber">
-              <span class="time-indicator" id="time-display-label">0.00s / 8.00s</span>
-              <input type="range" id="timeline-scrubber-slider" class="win11-range" min="0" max="8.0" step="0.02" value="0">
+              <input type="range" id="timeline-scrubber-slider" aria-label="播放位置" class="win11-range" min="0" max="8.0" step="0.02" value="0">
             </div>
 
             <div class="timeline-toolbar-right">
-              <select id="playback-speed-select" class="win11-select" style="padding: 3px 8px; font-size: 11px;">
+              <select id="playback-speed-select" aria-label="播放速度" class="win11-select" style="padding: 3px 8px; font-size: 11px;">
                 <option value="0.5">0.5x</option>
                 <option value="1.0" selected>1.0x</option>
                 <option value="1.5">1.5x</option>
@@ -1231,13 +1346,9 @@
             </div>
           </div>
           <div class="timeline-canvas-wrap" id="timeline-canvas-wrap"></div>
-        </div>
-
-      </section>
-
-    </main>
-
-  </div>
+        </section>
+      </div>
+    </div>
   </div><!-- /#page-studio -->
   </main><!-- /.app-main-viewport -->
 
@@ -1250,23 +1361,23 @@
     <div class="rich-modal-box" style="width: 540px;">
       <div class="rich-modal-header">
         <div class="rich-modal-title">
-          <span class="brand-m-mini">M</span>
+          <img class="brand-icon" src="./app_icon.png" width="17" height="17" alt="">
           <span>关于 Math Studio</span>
         </div>
         <button class="rich-modal-close" data-close="dialog-about">✕</button>
       </div>
       <div class="rich-modal-body">
         <div style="display: flex; gap: 16px; align-items: center; margin-bottom: 18px; padding-bottom: 16px; border-bottom: 1px solid var(--win-border-subtle);">
-          <div style="width: 64px; height: 64px; background: linear-gradient(135deg, #0078d4, #005a9e); border-radius: 14px; display: flex; align-items: center; justify-content: center; font-family: 'Times New Roman', Georgia, serif; font-size: 38px; font-weight: bold; color: #fff; box-shadow: 0 8px 24px rgba(0, 120, 212, 0.45);">M</div>
+          <img class="app-logo" src="./app_icon.png" width="64" height="64" alt="Math Studio 图标">
           <div>
             <h2 style="font-size: 20px; font-weight: 600;">Math Studio</h2>
-            <p style="font-size: 13px; color: var(--win-accent);">v2.0.4 Windows 11 Fluent Edition</p>
+            <p style="font-size: 13px; color: var(--win-accent);">v2.1.0</p>
             <p style="font-size: 12px; color: var(--win-text-secondary); margin-top: 3px;">高级数学函数与复合动画可视化工作台</p>
           </div>
         </div>
 
         <p style="margin-bottom: 12px; font-size: 13px; line-height: 1.7;">
-          Math Studio 是一款基于 Windows 11 Fluent Design（云母 Mica、亚克力与 Segoe UI 规范）打造的高级数学可视化桌面软件。集成了高性能 WebGL2 3D 向量图形、SymPy 符号微积分代数内核、任意参数关键帧复合变换与 FFmpeg 60fps 硬件视频编码管线。
+          Math Studio 是一款数学函数与动画可视化桌面软件。集成了高性能 WebGL2 3D 向量图形、SymPy 符号微积分代数内核、任意参数关键帧复合变换与 FFmpeg 60fps 硬件视频编码管线。
         </p>
 
         <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid var(--win-border-subtle); border-radius: 8px; padding: 12px 14px; font-size: 12.5px; margin-bottom: 12px;">
@@ -1457,7 +1568,7 @@
       <div class="rich-modal-body">
         <div style="text-align: center; margin-bottom: 16px;">
           <div style="font-size: 20px; font-weight: 600;">Math Studio 2.0</div>
-          <div style="font-size: 12px; color: var(--win-text-secondary); margin-top: 2px;">版本编号: 2.0.4.20261017 (Release)</div>
+          <div style="font-size: 12px; color: var(--win-text-secondary); margin-top: 2px;">版本编号: 2.1.0</div>
           <div style="display: inline-block; padding: 3px 10px; background: rgba(0, 255, 136, 0.15); color: #00ff88; border-radius: 12px; font-size: 11px; margin-top: 8px; font-weight: 500;">● 全部运行组件就绪</div>
         </div>
 
